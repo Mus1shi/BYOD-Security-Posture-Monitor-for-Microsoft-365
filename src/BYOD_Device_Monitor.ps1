@@ -77,10 +77,107 @@ function Get-EntraDeviceInfoByDeviceId {
     
 }
 
+#=============================
+# ENTRA COLLECT (TEST 1 PAGE)
+#=============================
+#But : Valider que la requête Grapah /devices fonctionne et vérifier la présence du NextLink
+# Cette fonction sert uniquement de "proof /test"
+#=============================
+
+function Get-EntraDevices {
+    param (
+    [parameter(Mandatory)] [hashtable] $Headers
+)
+ 
+$uri = "https://graph.microsoft.com/V1.0/devices?`$select=deviceId,displayName,trustType,operatingSystem,operatingSystemVersion,approximateLastSignInDateTime,accountEnabled"
+$resp = Invoke-RestMethod -Method GET -Uri $uri -Headers $Headers
+
+$nextLink = $null
+
+   if ($resp.PRObject.Properties.Name -contains '@odata.nextLink') {
+    $nextLink = $resp.'@odata.nextLink'
+   }
+   elseif ($resp.PRObject.Properties.Name -contains 'nextLink') {
+    $nextLink = $resp.nextLink
+   }
+
+   $fullExport = [PSCustomObject]@{
+    devices = $resp.value
+    nextLink = $nextLink
+   }
+return $fullExport
+}
+
+#===============================
+# PREUVE DE PAGINATION
+#===============================
+# On appelle une page pour confirmer : le nbr de device retorunés et la présence du nextlink
+
+$page1 = Get-EntraDevices -Headers $headers
+write-host "devices page1 = " $page1.devices.count
+
+if ($null -eq $page1.nextLink) {
+    Write-Host "NextLink est vide !" -ForegroundColor Red
+}else {
+    Write-Host "NextLink est présent !" -ForegroundColor Blue
+}
+
+$page1.devices | Select-Object displayname, trustType, deviceEd -First 5
 
 
+#==============================
+# ENTRA COLLECT (FULL)
+#==============================
+# Collecte complète des devices Entra via pagination @odata.nextLink
+# Output : liste plate de devixes (array)
+#==============================
 
 
+function Get-AllEntraDevices {
+    param (
+        [parameter (Mandatory)] [hashtable] $Headers
+    )
+
+    $Currenturl = "https://graph.microsoft.com/V1.0/devices?`$select=deviceId,displayName,trustType,operatingSystem,operatingSystemVersion,approximateLastSignInDateTime,accountEnabled"
+    $allItems = @()
+    $pageCount = 0
+
+    try {
+        while ($currentUrl){
+
+            $resp = Invoke-RestMethod -Method GET -uri $Currenturl -Headers $Headers
+            $pageCount++
+
+            write-host "Calling page $pageCount ..." -ForegroundColor Yellow
+
+            if ($resp.value) {
+                $allItems += $resp.value
+            }
+
+            #Gestion du NextLink
+
+            $nextLink = $null
+
+            if ($resp.PSObject.Properties.Name -contains '@odata.nextLink') {
+                $nextLink = $resp.'@odata.nextLink'
+            }
+            elseif ($resp.PSObject.Properties.Name -contains 'nextlink') {
+                $nextLink = $resp.nextLink
+            }
+
+            Write-Host ("Page {0} collected | Total so far: {1}" -f `
+                $pageCount, $allItems.Count)
+            
+            $currentUrl = $nextLink
+        }
+    }
+catch {
+    Write-Error "Erreur graph Entra : $($_.Exception.Message)"
+    exit
+}
+return $allItems
+
+}
 
 
 
