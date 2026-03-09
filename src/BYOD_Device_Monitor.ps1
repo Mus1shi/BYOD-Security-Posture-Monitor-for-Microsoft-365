@@ -62,3 +62,33 @@ Write-Host "Access token length: $($token.access_token.length)" -ForegroundColor
 #Fonction utilisée pour valider rapidement qu'un deviceId Intune existe bien côté Entramatching bulk deficnition
 #Matching "Bulk" à venir
 #==========================
+
+function Get-EntraDeviceInfoByDeviceId {
+    param (
+        [parameter(Mandatory)] [string] $DeviceId,
+        [parameter(Mandatory)] [hashtable] $Headers
+    )
+
+    $uri = "https://graph.microsoft.com/v1.0/devices?`$filter=devideId eq '$DeviceId'&`$select=deviceId,trustType,accountEnabled,displayName"
+    $resp = Invoke-RestMethod -Method GET -Uri $uri -Headers $Headers
+
+    if ($resp.value.count -eq 0) { return $null }
+    return $resp.value[0]
+    
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
