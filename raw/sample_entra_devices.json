@@ -1,0 +1,97 @@
+{
+
+  "devices": [
+
+    {
+
+      "deviceId": "11111111-aaaa-bbbb-cccc-000000000001",
+
+      "displayName": "LAPTOP-001",
+
+      "trustType": "AzureAD",
+
+      "operatingSystem": "Windows",
+
+      "operatingSystemVersion": "10.0",
+
+      "approximateLastSignInDateTime": "2026-03-01T10:15:00Z",
+
+      "accountEnabled": true
+
+    },
+
+    {
+
+      "deviceId": "11111111-aaaa-bbbb-cccc-000000000002",
+
+      "displayName": "LAPTOP-002",
+
+      "trustType": "Workplace",
+
+      "operatingSystem": "Windows",
+
+      "operatingSystemVersion": "11.0",
+
+      "approximateLastSignInDateTime": "2026-03-02T09:30:00Z",
+
+      "accountEnabled": true
+
+    },
+
+    {
+
+      "deviceId": "11111111-aaaa-bbbb-cccc-000000000003",
+
+      "displayName": "DESKTOP-003",
+
+      "trustType": "AzureAD",
+
+      "operatingSystem": "Windows",
+
+      "operatingSystemVersion": "10.0",
+
+      "approximateLastSignInDateTime": "2026-03-01T15:40:00Z",
+
+      "accountEnabled": true
+
+    },
+
+    {
+
+      "deviceId": "11111111-aaaa-bbbb-cccc-000000000004",
+
+      "displayName": "BYOD-LAPTOP-004",
+
+      "trustType": "Workplace",
+
+      "operatingSystem": "Windows",
+
+      "operatingSystemVersion": "11.0",
+
+      "approximateLastSignInDateTime": "2026-02-28T18:20:00Z",
+
+      "accountEnabled": true
+
+    },
+
+    {
+
+      "deviceId": "11111111-aaaa-bbbb-cccc-000000000005",
+
+      "displayName": "LAPTOP-005",
+
+      "trustType": "AzureAD",
+
+      "operatingSystem": "Windows",
+
+      "operatingSystemVersion": "11.0",
+
+      "approximateLastSignInDateTime": "2026-03-03T08:00:00Z",
+
+      "accountEnabled": true
+
+    }
+
+  ]
+
+}
