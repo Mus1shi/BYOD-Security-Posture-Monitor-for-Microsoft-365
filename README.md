@@ -1,3 +1,9 @@
+⚠️ **Work in Progress**
+
+This project is currently under active development.  
+Features, structure and documentation may evolve as the project progresses.
+
+
 # BYOD-Security-Posture-Monitor-for-Microsoft-365 (in Process)
 
 Prototype tool to correlate device inventories across:
