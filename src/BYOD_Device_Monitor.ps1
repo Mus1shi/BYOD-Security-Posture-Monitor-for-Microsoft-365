@@ -180,6 +180,21 @@ return $allItems
 }
 
 
+#===========================
+# EXPORT ENTRA
+#===========================
+
+$entraAll = Get-AllEntraDevices -Headers $headers
+
+$date = Get-Date -Format "yyyyMMdd-HHmm"
+
+$rawFullPath = "data/raw/raw_entra_full_devices_$date.json"
+
+$fullExport = [PSCustomObject]@{
+    collectedAt = (Get-Date).ToString("o")
+    totalDevices = $entraAll.count
+    devices = $entraAll
+}
 
 
 
