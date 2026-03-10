@@ -196,8 +196,10 @@ $fullExport = [PSCustomObject]@{
     devices = $entraAll
 }
 
+$fullExport | ConvertTo-Json -Depth 10 | Out-File -FilePath $rawFullPath -Encoding utf8
 
-
+Write-Host "Full raw export saved to $rawFullPath" -ForegroundColor Green
+Write-Host "Total entra devices = $($entraAll.count)" -ForegroundColor Green
 
 
 
