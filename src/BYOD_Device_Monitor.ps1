@@ -202,6 +202,33 @@ Write-Host "Full raw export saved to $rawFullPath" -ForegroundColor Green
 Write-Host "Total entra devices = $($entraAll.count)" -ForegroundColor Green
 
 
+#===============================================
+#   FILTER ENTRA : REGISTERED (WORKPLACE)
+#===============================================
+
+
+$entraRegistered = $entraAll | Where-Object { $_.trustType -eq "workplace" }
+
+Write-Host "Total Entra registered (workplpace) = $($entraRegistered.count)" -ForegroundColor Green
+
+$registeredPath = "data/processed/entra_registered_devices_$date.json"
+
+$registeredExport = [PSCustomObject]@{
+    collectedAt = (Get-Date).ToString("o")
+    trustTypeFilter = "workplace"
+    totalDevices = $entraRegistered.count
+    devices = $entraRegistered
+}
+
+$registeredExport | ConvertTo-Json -depth 10 | Out-File -FilePath $registeredPath -Encoding utf8
+
+write-host "Registered export saved to $registeredPath" -ForegroundColor green
+
+
+
+
+
+
 
 
 
