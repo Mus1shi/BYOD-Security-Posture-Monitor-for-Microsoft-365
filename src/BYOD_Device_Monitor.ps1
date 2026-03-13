@@ -1,17 +1,14 @@
-# ==========================================
-# BYOD Security Posture Monitor
-# Work in Progress
-#
-# This script is part of an ongoing project
-# currently under active development.
-# Structure and features may evolve.
-# ==========================================
+#Objectif du script :
 
-## Disclaimer
+#1. Authentification app-only à Microsoft Graph
 
-This project was developed to support security teams in monitoring BYOD devices in Microsoft 365 environments.
+#2. Extraction des devices gérés depuis Intune
 
-The version published in this repository is sanitized. All sensitive information, tenant identifiers, internal configurations and operational data have been removed or replaced with sample data.
+#3. Normalisation des données pour export
+
+#4. Enrichissement via Entra ID (trustType)
+
+#5. Préparation d'une vue risque BYOD
 
  
 
@@ -125,153 +122,8 @@ $headers = @{ Authorization = "Bearer $($token.access_token)" }
 
 Write-Host "Auth token ready" -ForegroundColor Gray
 
- 
 
-# ==============================
 
-# ENTRA LOOKUP (UNITAIRE)
-
-# ==============================
-
-# Fonction utilisée pour valider rapidement qu’un deviceId Intune existe bien côté Entra
-
-# (à terme, on évite le 1 call = 1 device : on fera du matching "bulk")
-
-# ==============================
-
- 
-
-function Get-EntraDeviceInfoByDeviceId {
-
-   
-
-    param (
-
-        [parameter(Mandatory)] [string] $DeviceId,
-
-        [parameter(Mandatory)] [hashtable] $Headers
-
-    )
-
- 
-
-    $uri = "https://graph.microsoft.com/v1.0/devices?`$filter=deviceId eq '$DeviceId'&`$select=deviceId,trustType,accountEnabled,displayName"
-
-    $r = Invoke-RestMethod -Method GET -Uri $uri -Headers $Headers
-
- 
-
-    if ($r.value.count -eq 0) { return $null }
-
-    return $r.value[0]
-
-   
-
-}
-
- 
-
-# ==============================
-
-# ENTRA COLLECT (TEST 1 PAGE)
-
-# ==============================
-
-# But : valider que la requête Graph /devices fonctionne et vérifier la présence du nextLink
-
-# Cette fonction sert uniquement de "proof" / test.
-
-# ==============================
-
- 
-
-function Get-EntraDevices {
-
-    param (
-
-        [parameter(Mandatory)] [hashtable] $Headers
-
-    )
-
-   
-
-    $uri = "https://graph.microsoft.com/v1.0/devices?`$select=deviceId,displayName,trustType,operatingSystem,operatingSystemVersion,approximateLastSignInDateTime,accountEnabled"
-
-    $r = Invoke-RestMethod -Method GET -Uri $uri -Headers $Headers
-
- 
-
-   
-
-    $nextLink = $null
-
- 
-
-    if ($r.PSObject.Properties.Name -contains '@odata.nextLink') {
-
-        $nextLink = $r.'@odata.nextLink'
-
-    }
-
-    elseif ($r.PSObject.Properties.Name -contains 'nextLink') {
-
-        $nextLink = $r.nextLink
-
-    }
-
- 
-
-    $fullExport = [pscustomobject]@{
-
-        devices  = $r.value
-
-        nextLink = $nextLink
-
-    }
-
-    return $fullExport
-
-}
-
- 
-
-# ==============================
-
-# PREUVE DE PAGINATION
-
-# ==============================
-
-# On appelle 1 page pour confirmer :
-
-# - nombre de devices retournés
-
-# - présence du nextLink (si >1 page)
-
-# ==============================
-
- 
-
-#$page1 = Get-EntraDevices -Headers $headers
-
-#Write-Host "devices page1 = " $page1.devices.count
-
- 
-
-#if ($null -eq $page1.nextLink) {
-
-#   Write-Host "NextLink est vide !" -ForegroundColor Red
-
-#}else {
-
-#   Write-Host "NextLink Présent !" -ForegroundColor Blue
-
-#}
-
- 
-
-#$page1.devices | Select-Object displayName, trustType, deviceId -First 5
-
- 
 
 # ==============================
 
@@ -579,53 +431,7 @@ try {
 
  
 
-    #================================
-
-    #--------Test de jointure--------
-
-    #================================
-
- 
-
-    #====================================
-
-    #--------Intune <-----> Entra--------
-
-    #====================================
-
-    #$listeIntuneWithAAD = $cleanExport | Where-Object { $_.AZURE_AD_DEVICE_ID }
-
- 
-
-    #Write-Host "Intune devices with AzureADDeviceId = $($listeIntuneWithAAD.Count)" -ForegroundColor Green
-
- 
-
-    #$matched = 0
-
- 
-
-    #foreach ($device in $listeIntuneWithAAD) {
-
- 
-
-    #    $entraMatch = $entraAll | Where-Object { $_.deviceId -eq $device.AZURE_AD_DEVICE_ID }
-
- 
-
-    #    if ($entraMatch) {
-
-    #       $matched++
-
-    #  }
-
- 
-
-    #}
-
- 
-
-    #Write-Host "Intune devices matched in Entra = $matched" -ForegroundColor Cyan
+   
 
  
 
@@ -665,7 +471,7 @@ try {
 
  
 
-    $totalIntuneDevices = $cleanExport.Count
+    #$totalIntuneDevices = $cleanExport.Count
 
     $intuneWithAADCount = 0
 
@@ -733,18 +539,6 @@ try {
 
     }
 
- 
-
-    #Write-Host "Total Intune devices = $totalIntuneDevices" -ForegroundColor Yellow
-
-    #Write-Host "Intune devices with AzureADDeviceId = $intuneWithAADCount" -ForegroundColor Yellow
-
-    #Write-Host "Intune devices matched in Entra = $matchedInEntraCount" -ForegroundColor Yellow
-
-    #Write-Host "Intune devices not matched in Entra = $notMatchedInEntraCount" -ForegroundColor Yellow
-
-    #Write-Host "Intune devices enriched with ENTRA_TRUST_TYPE = $entraTrustTypeFilledCount" -ForegroundColor Yellow
-
 
 
 
@@ -756,19 +550,9 @@ try {
 
  
 
-    #$trendDevices.GetType().FullName
-
-    #$trendDevices | Select-Object -First 1 | Format-List *
-
- 
+   
 
     Write-Host "Trend devices loaded =" $trendDevices.count -ForegroundColor Cyan
-
- 
-
-    #$trendDevices | Select-Object endpointName -First 5
-
- 
 
     #======================================
 
@@ -778,7 +562,7 @@ try {
 
  
 
-    $CorrelateDevices = @()
+    $ConsolidatedDevices = @()
 
  
 
@@ -794,6 +578,8 @@ try {
 
         $match_status = $null
 
+       
+
  
 
         $entraMatch = $entraAll | Where-Object { $_.displayName -eq $device.endpointName }
@@ -804,8 +590,6 @@ try {
 
  
 
-            #Write-Host "Found Entra match for" $device.endpointName -ForegroundColor Blue
-
             $intuneMatch = $cleanExport | Where-Object { $_.AZURE_AD_DEVICE_ID -eq $entraMatch.deviceId }
 
  
@@ -813,8 +597,6 @@ try {
             if ($intuneMatch) {
 
  
-
-                #Write-Host "Found Intune match"
 
                 $match_status = "matched"
 
@@ -848,71 +630,484 @@ try {
 
         }
 
+ 
 
-
-
-        $CorrelateObject = [PSCustomObject]@{
-
-            device_name  = $device.endpointName
-
-            trend        = $device
-
-            entra        = $entraMatch
-
-            intune       = $intuneMatch
-
-            match_status = $match_status
-
-            match_reason = $match_reason
-
-   
-
-   
+       
 
  
 
+        $ConsolidatedObject = [PSCustomObject]@{
+
+            primary_user                   = if ($intuneMatch -and $intuneMatch.USER) { $intuneMatch.USER } elseif ($device.lastLoggedOnUser) { $device.lastLoggedOnUser } else { "unknown" }
+
+            device_os                      = if ($device.osName) { $device.osName } elseif ($intuneMatch -and $intuneMatch.OS) { $intuneMatch.OS } elseif ($entraMatch -and $entraMatch.operatingSystem) { $entraMatch.operatingSystem } else { "unknown" }
+
+            device_os_version              = if ($device.osVersion) { $device.osVersion } elseif ($intuneMatch -and $intuneMatch.OS_VERSION) { $intuneMatch.OS_VERSION } elseif ($entraMatch -and $entraMatch.operatingSystemVersion) { $entraMatch.operatingSystemVersion } else { "unknown" }
+
+            device_name                    = if ($device.endpointName) { $device.endpointName } elseif ($entraMatch -and $entraMatch.displayName) { $entraMatch.displayName } elseif ($intuneMatch -and $intuneMatch.DEVICE) { $intuneMatch.DEVICE } else { "unknown" }
+
+ 
+
+            trend_agent_guid               = if ($device.agentGuid) { $device.agentGuid } else { "unknown" }
+
+            trend_type                     = if ($device.type) { $device.type } else { "unknown" }
+
+            trend_display_name             = if ($device.displayName) { $device.displayName } else { "unknown" }
+
+            trend_endpoint_name            = if ($device.endpointName) { $device.endpointName } else { "unknown" }
+
+            trend_last_used_ip             = if ($device.lastUsedIp) { $device.lastUsedIp } else { "unknown" }
+
+            trend_ip_addresses             = if ($device.ipAddresses) { $device.ipAddresses } else { @() }
+
+            trend_serial_number            = if ($device.serialNumber) { $device.serialNumber } else { "unknown" }
+
+            trend_os_name                  = if ($device.osName) { $device.osName } else { "unknown" }
+
+            trend_os_version               = if ($device.osVersion) { $device.osVersion } else { "unknown" }
+
+            trend_os_architecture          = if ($device.osArchitecture) { $device.osArchitecture } else { "unknown" }
+
+            trend_os_platform              = if ($device.osPlatform) { $device.osPlatform } else { "unknown" }
+
+            trend_cpu_architecture         = if ($device.cpuArchitecture) { $device.cpuArchitecture } else { "unknown" }
+
+            trend_isolation_status         = if ($device.isolationStatus) { $device.isolationStatus } else { "unknown" }
+
+            trend_service_gateway          = if ($device.serviceGatewayOrProxy) { $device.serviceGatewayOrProxy } else { "unknown" }
+
+            trend_version_policy           = if ($device.versionControlPolicy) { $device.versionControlPolicy } else { "unknown" }
+
+            trend_agent_update_status      = if ($device.agentUpdateStatus) { $device.agentUpdateStatus } else { "unknown" }
+
+            trend_agent_update_policy      = if ($device.agentUpdatePolicy) { $device.agentUpdatePolicy } else { "unknown" }
+
+            trend_security_policy          = if ($device.securityPolicy) { $device.securityPolicy } else { "unknown" }
+
+            trend_security_override        = if ($device.securityPolicyOverriddenStatus) { $device.securityPolicyOverriddenStatus } else { "unknown" }
+
+            trend_last_logged_on_user      = if ($device.lastLoggedOnUser) { $device.lastLoggedOnUser } else { "unknown" }
+
+ 
+
+            entra_device_id                = if ($entraMatch -and $entraMatch.deviceId) { $entraMatch.deviceId } else { "unknown" }
+
+            entra_display_name             = if ($entraMatch -and $entraMatch.displayName) { $entraMatch.displayName } else { "unknown" }
+
+            entra_trust_type               = if ($entraMatch -and $entraMatch.trustType) { $entraMatch.trustType } else { "unknown" }
+
+            entra_operating_system         = if ($entraMatch -and $entraMatch.operatingSystem) { $entraMatch.operatingSystem } else { "unknown" }
+
+            entra_operating_system_version = if ($entraMatch -and $entraMatch.operatingSystemVersion) { $entraMatch.operatingSystemVersion } else { "unknown" }
+
+            entra_last_signin              = if ($entraMatch -and $entraMatch.approximateLastSignInDateTime) { $entraMatch.approximateLastSignInDateTime } else { "unknown" }
+
+            entra_account_enabled          = if ($entraMatch -and $null -ne $entraMatch.accountEnabled) { $entraMatch.accountEnabled } else { $false }
+
+ 
+
+            intune_device_id               = if ($intuneMatch -and $intuneMatch.INTUNE_DEVICE_ID) { $intuneMatch.INTUNE_DEVICE_ID } else { "unknown" }
+
+            intune_azure_ad_device_id      = if ($intuneMatch -and $intuneMatch.AZURE_AD_DEVICE_ID) { $intuneMatch.AZURE_AD_DEVICE_ID } else { "unknown" }
+
+            intune_device_name             = if ($intuneMatch -and $intuneMatch.DEVICE) { $intuneMatch.DEVICE } else { "unknown" }
+
+            intune_user                    = if ($intuneMatch -and $intuneMatch.USER) { $intuneMatch.USER } else { "unknown" }
+
+            intune_compliance_state        = if ($intuneMatch -and $intuneMatch.COMPLIANCE) { $intuneMatch.COMPLIANCE } else { "unknown" }
+
+            intune_serial_number           = if ($intuneMatch -and $intuneMatch.SERIAL_NUMBER) { $intuneMatch.SERIAL_NUMBER } else { "unknown" }
+
+            intune_os                      = if ($intuneMatch -and $intuneMatch.OS) { $intuneMatch.OS } else { "unknown" }
+
+            intune_os_version              = if ($intuneMatch -and $intuneMatch.OS_VERSION) { $intuneMatch.OS_VERSION } else { "unknown" }
+
+            intune_enrolled_date           = if ($intuneMatch -and $intuneMatch.ENROLLED_DATE) { $intuneMatch.ENROLLED_DATE } else { "unknown" }
+
+            intune_ownership               = if ($intuneMatch -and $intuneMatch.OWNERSHIP_INTUNE) { $intuneMatch.OWNERSHIP_INTUNE } else { "unknown" }
+
+            intune_entra_trust_type        = if ($intuneMatch -and $intuneMatch.ENTRA_TRUST_TYPE) { $intuneMatch.ENTRA_TRUST_TYPE } else { "unknown" }
+
+ 
+
+            match_status                   = $match_status
+
+            match_reason                   = $match_reason
+
+            issues                         = @()
+
+            visual_tag                     = $null
+
+            recommended_action             = $null
+
+ 
+
+            duplicate_hostname             = $false
+
+            duplicate_hostname_count       = 1
+
+ 
+
+            trend_count                    = 1
+
+            entra_count                    = 0
+
+            intune_count                   = 0
+
+ 
+
+            has_trend                      = $true
+
+            has_entra                      = if ($entraMatch) { $true } else { $false }
+
+            has_intune                     = if ($intuneMatch) { $true } else { $false }
+
+ 
+
+            is_registered_in_entra         = if ($entraMatch) { $true } else { $false }
+
+            is_managed_in_intune           = if ($intuneMatch) { $true } else { $false }
+
+            is_noncompliant                = if ($intuneMatch -and $intuneMatch.COMPLIANCE -eq "noncompliant") { $true } else { $false }
+
+ 
+
+            trend                          = $device
+
+            entra                          = $entraMatch
+
+            intune                         = $intuneMatch
+
         }
 
-        $CorrelateDevices += $CorrelateObject
+        $ConsolidatedDevices += $ConsolidatedObject
 
  
 
     }
 
- 
 
-    $DevicesMatched = $CorrelateDevices | Where-Object { $_.match_status -eq "matched" }
 
-    $DevicesPartial = $CorrelateDevices | Where-Object { $_.match_status -eq "partial" }
 
-    $DevicesUnmatched = $CorrelateDevices | Where-Object { $_.match_status -eq "unmatched" }
+    #=======================================================================================================================================================
 
  
 
-    #Write-Host " "
+    $DevicesMatched = $ConsolidatedDevices | Where-Object { $_.match_status -eq "matched" }
 
-    #Write-Host "=========================="
+    $DevicesPartial = $ConsolidatedDevices | Where-Object { $_.match_status -eq "partial" }
 
-    #Write-Host "    Correlation Summary   "
+    $DevicesUnmatched = $ConsolidatedDevices | Where-Object { $_.match_status -eq "unmatched" }
 
-    #Write-Host "=========================="
+   
 
-    #write-host " "
+   
 
-    #Write-Host "Total devices : " $CorrelateDevices.count -ForegroundColor Blue
+   
 
-    #write-host "Devices matched : " $DevicesMatched.count -ForegroundColor Blue
+    # =====================================================================
 
-    #Write-Host "Devices partial : " $DevicesPartial.count -ForegroundColor Blue
+    # DETECTION DES HOSTNAMES DUPLIQUES
 
-    #Write-Host "Devices unmatched : " $DevicesUnmatched.count -ForegroundColor Blue
+    # =====================================================================
 
-    #Write-Host  " "
+ 
 
-    #Write-Host "=========================="
+    # On groupe tous les devices par nom
 
+    # Cela permet de savoir combien de fois chaque hostname apparaît
 
+ 
 
+    $duplicateHostnames = $ConsolidatedDevices | Group-Object device_name | Where-Object { $_.Count -gt 1 }
+
+ 
+
+    # =====================================================================
+
+    # AJOUT DES INFORMATIONS DE DOUBLON DANS CHAQUE DEVICE
+
+    # =====================================================================
+
+ 
+
+    foreach ($device in $ConsolidatedDevices) {
+
+ 
+
+        # On cherche si le nom du device actuel existe dans la liste des doublons
+
+        $duplicateMatch = $duplicateHostnames | Where-Object { $_.Name -eq $device.device_name }
+
+ 
+
+        # Si le hostname existe dans la liste des doublons
+
+        if ($duplicateMatch) {
+
+ 
+
+            # Le hostname est utilisé plusieurs fois
+
+            $device.duplicate_hostname = $true
+
+ 
+
+            # On enregistre combien de fois ce hostname apparaît
+
+            $device.duplicate_hostname_count = $duplicateMatch.Count
+
+ 
+
+        }
+
+        else {
+
+ 
+
+            # Sinon le hostname est unique
+
+            $device.duplicate_hostname = $false
+
+ 
+
+            # Il apparaît une seule fois
+
+            $device.duplicate_hostname_count = 1
+
+        }
+
+    }
+
+   
+
+   
+
+    # =====================================================================
+
+    # AJOUT DES COMPTEURS PAR SOURCE DANS CHAQUE DEVICE
+
+    # =====================================================================
+
+ 
+
+    foreach ($device in $ConsolidatedDevices) {
+
+ 
+
+        $currentDeviceName = $device.device_name
+
+ 
+
+        $device.trend_count = ($ConsolidatedDevices | Where-Object { $_.device_name -eq $currentDeviceName -and $_.has_trend -eq $true }).Count
+
+ 
+
+        $device.entra_count = ($ConsolidatedDevices | Where-Object { $_.device_name -eq $currentDeviceName -and $_.has_entra -eq $true }).Count
+
+ 
+
+        $device.intune_count = ($ConsolidatedDevices | Where-Object { $_.device_name -eq $currentDeviceName -and $_.has_intune -eq $true }).Count
+
+    }
+
+    $duplicateHostnameCount = $duplicateHostnames.Count
+
+ 
+
+    #================================
+
+    #       RISK ENGINE RULES
+
+    #================================
+
+ 
+
+    foreach ($device in $ConsolidatedDevices) {
+
+ 
+
+        if ($device.match_status -eq "unmatched") {
+
+ 
+
+            $device.issues = @("not_registered_in_entra")
+
+            $device.visual_tag = "critical"
+
+            $device.recommended_action = "Investigate device origin and tenant registration"
+
+ 
+
+        }
+
+ 
+
+        elseif ($device.intune -and $device.intune.COMPLIANCE -eq "noncompliant") {
+
+ 
+
+            $device.issues = @("noncompliant_device")
+
+            $device.visual_tag = "critical"
+
+            $device.recommended_action = "Investigate device compliance policy"
+
+ 
+
+        }
+
+ 
+
+        elseif ($device.entra -and $device.entra.trustType -eq "Workplace") {
+
+ 
+
+            $device.issues = @("byod_workplace")
+
+            $device.visual_tag = "warning"
+
+            $device.recommended_action = "Verify if BYOD usage is expected"
+
+ 
+
+        }
+
+ 
+
+        elseif ($device.match_status -eq "partial") {
+
+ 
+
+            $device.issues = @("not_managed_in_intune")
+
+            $device.visual_tag = "warning"
+
+            $device.recommended_action = "Investigate device management status in Intune"
+
+ 
+
+        }
+
+    }
+
+ 
+
+    foreach ($device in $ConsolidatedDevices) {
+
+        if ($null -eq $device.visual_tag ) {
+
+            $device.visual_tag = "normal"
+
+        }
+
+    }
+
+ 
+
+    $tagCountCritical = $ConsolidatedDevices | Where-Object { $_.visual_tag -eq "critical" }
+
+    $tagCountWarning = $ConsolidatedDevices | Where-Object { $_.visual_tag -eq "warning" }
+
+    $tagCountNormal = $ConsolidatedDevices | Where-Object { $_.visual_tag -eq "normal" }
+
+ 
+
+    $duplicateHostnameCount = $duplicateHostnames.Count
+
+ 
+
+    $tagCountCritical = $ConsolidatedDevices | Where-Object { $_.visual_tag -eq "critical" }
+
+    $tagCountWarning = $ConsolidatedDevices | Where-Object { $_.visual_tag -eq "warning" }
+
+    $tagCountNormal = $ConsolidatedDevices | Where-Object { $_.visual_tag -eq "normal" }
+
+ 
+
+    $FullJsonDataset = [PSCustomObject]@{
+
+        generated_at  = $date
+
+        total_records = $ConsolidatedDevices.Count
+
+ 
+
+        summary       = [PSCustomObject]@{
+
+            total_devices        = $ConsolidatedDevices.Count
+
+            critical_devices     = $tagCountCritical.Count
+
+            warning_devices      = $tagCountWarning.Count
+
+            normal_devices       = $tagCountNormal.Count
+
+ 
+
+            matched_devices      = $DevicesMatched.Count
+
+            partial_devices      = $DevicesPartial.Count
+
+            unmatched_devices    = $DevicesUnmatched.Count
+
+ 
+
+            duplicate_hostnames  = $duplicateHostnameCount
+
+ 
+
+            trend_present        = ($ConsolidatedDevices | Where-Object { $_.has_trend -eq $true }).Count
+
+            entra_present        = ($ConsolidatedDevices | Where-Object { $_.has_entra -eq $true }).Count
+
+            intune_present       = ($ConsolidatedDevices | Where-Object { $_.has_intune -eq $true }).Count
+
+ 
+
+            registered_in_entra  = ($ConsolidatedDevices | Where-Object { $_.is_registered_in_entra -eq $true }).Count
+
+            managed_in_intune    = ($ConsolidatedDevices | Where-Object { $_.is_managed_in_intune -eq $true }).Count
+
+            noncompliant_devices = ($ConsolidatedDevices | Where-Object { $_.is_noncompliant -eq $true }).Count
+
+        }
+
+ 
+
+        records       = $ConsolidatedDevices
+
+    }
+
+ 
+
+    Write-Host "JSON FINAL CREE" -ForegroundColor Green
+
+    Write-Host "TOTAL RECORDS =" $FullJsonDataset.total_records -ForegroundColor Green
+
+ 
+
+    $FullJsonDataset.total_records
+
+    $FullJsonDataset.records.Count
+
+ 
+
+   
+
+    Write-Host "device with visual_tag critical: " $tagCountCritical.count
+
+    Write-Host "device with visual_tag warning : " $tagCountWarning.count
+
+    Write-Host "device with visual_tag normal : " $tagCountNormal.count
+
+ 
+
+    $fulljsonPath = "./data/reports/Full_devices_report_$date.json"
+
+    $FullJsonDataset | ConvertTo-Json -Depth 10 | Out-File -FilePath $fulljsonPath -Encoding UTF8
+
+   
 
     #=============================
 
@@ -922,183 +1117,59 @@ try {
 
  
 
+    # ==============================
+
+    # HELPDESK DATASET (VIEW)
+
+    # ==============================
+
+ 
+
     $helpdeskCases = @()
 
  
 
-    foreach ($device in $CorrelateDevices) {
+    foreach ($device in $ConsolidatedDevices) {
 
  
 
-        if ($device.match_status -eq "unmatched") {
+        if ($device.visual_tag -eq "critical" -or $device.visual_tag -eq "warning") {
 
  
-
-            $deviceName = $device.device_name
-
-            $caseStatus = "unmatched"
-
-            $caseReason = "Device found in Trend Micro but not found in Entra ID"
-
-            $recommendedAction = "Investigate device origin and tenant registration"
 
             $caseUser = "unknown"
 
-            #$caseTrustType = "Trend Only"
-
-   
-
-            $HelpDeskObject = [PSCustomObject]@{
-
-                device_name        = $deviceName
-
-                user               = $caseUser
-
-                reason             = $caseReason
-
-                recommended_action = $recommendedAction
-
-                status             = $caseStatus
-
-                #case_type = $caseTrustType
-
-            }
-
-            $helpdeskCases += $HelpDeskObject
-
  
 
-        }
-
-        elseif ($device.intune -and $device.intune.COMPLIANCE -eq "noncompliant") {
-
- 
-
-            $deviceName = $device.device_name
-
-            $caseStatus = "noncompliant"
-
-            $caseReason = "Device NONCOMPLIANT"
-
-            $recommendedAction = "Urgently investigate on the case"
-
-            $caseUser = $device.intune.USER
-
-            #$caseTrustType = "Device NON COMPLIANT"
-
- 
-
-            $HelpDeskObject = [PSCustomObject]@{
-
-                device_name        = $deviceName
-
-                user               = $caseUser
-
-                reason             = $caseReason
-
-                recommended_action = $recommendedAction
-
-                status             = $caseStatus
-
-                #case_type = $caseTrustType
-
-            }
-
-            $helpdeskCases += $HelpDeskObject
-
- 
-
-        }
-
-        elseif ($device.match_status -eq "partial") {
-
- 
-
-           
-
-            $deviceName = $device.device_name
-
-            $caseStatus = "partial"
-
-            $caseReason = "Device found in Trend Micro and Entra ID, BUT not in Intune"
-
-            $recommendedAction = "Investigate device origin and tenant registration"
-
-            $caseUser = $null
-
-            #$caseTrustType = "Trend Micro and Entra ID Only"
-
- 
-
-            if ($device.intune.USER) {
+            if ($device.intune -and $device.intune.USER) {
 
                 $caseUser = $device.intune.USER
 
             }
 
-            else {
-
-                $caseUser = "unknown"
-
-            }
-
  
 
             $HelpDeskObject = [PSCustomObject]@{
 
-                device_name        = $deviceName
+                device_name        = $device.device_name
 
-                user               = $caseUser  
+                user               = $caseUser
 
-                reason             = $caseReason
+                reason             = $device.match_reason
 
-                recommended_action = $recommendedAction
+                recommended_action = $device.recommended_action
 
-                status             = $caseStatus
+                status             = $device.match_status
 
-                #case_type = $caseTrustType
+                visual_tag         = $device.visual_tag
 
-            }
+                issues             = $device.issues
 
-            $helpdeskCases += $HelpDeskObject
-
- 
-
-        }
-
-        elseif ($device.entra -and $device.entra.trustType -eq "Workplace") {
-
- 
-
-            $deviceName = $device.device_name
-
-            $caseStatus = "workplace"
-
-            $caseReason = "BYOD device registered in Entra ID"
-
-            $recommendedAction = "Verify if BYOD usage is expected"
-
-            $caseUser = "unknown"
-
-            #$caseTrustType = "Trend Micro and Entra ID Only"
-
- 
-
-            $HelpDeskObject = [PSCustomObject]@{
-
-                device_name        = $deviceName
-
-                user               = $caseUser  
-
-                reason             = $caseReason
-
-                recommended_action = $recommendedAction
-
-                status             = $caseStatus
-
-                #case_type = $caseTrustType
+                entra_trust_type = $device.entra_trust_type
 
             }
+
+ 
 
             $helpdeskCases += $HelpDeskObject
 
@@ -1108,31 +1179,19 @@ try {
 
  
 
-   # Write-Host ""
+    # Tri (critical en premier)
 
-    #write-host "Total helpsdesk cases : " $HelpdeskCases.Count
-
-    #Write-Host ""
-
-    #$helpdeskCases | Select-Object -First 5
-
- 
-
-    $HelpDeskCases = $HelpdeskCases | Sort-Object @{
+    $helpdeskCases = $helpdeskCases | Sort-Object @{
 
         Expression = {
 
-            switch ($_.status) {
+            switch ($_.visual_tag) {
 
-                "unmatched" { 0 }
+                "critical" { 0 }
 
-                "noncompliant" { 1 }
+                "warning" { 1 }
 
-                "partial" { 2 }
-
-                "workplace" { 3 }
-
-                default { 4 }
+                default { 2 }
 
             }
 
@@ -1152,85 +1211,77 @@ try {
 
  
 
-    $HelpdeskCases | Export-Csv -Path $HelpDeskReportPathCsv -NoTypeInformation -Delimiter ";"
+    $helpdeskCases | Export-Csv -Path $HelpDeskReportPathCsv -NoTypeInformation -Delimiter ";"
 
  
 
-    $HelpdeskCases | ConvertTo-Json -Depth 5 | Out-File -FilePath $HelpDeskReportPathJson -Encoding UTF8
+    $helpdeskCases | ConvertTo-Json -Depth 5 | Out-File -FilePath $HelpDeskReportPathJson -Encoding UTF8
+
+   
+
+    # ============================
+
+    # BYOD DEVICE MONITOR REPORT
+
+    # ============================
 
  
 
-    #Write-Host "Helpdesk report exported" -ForegroundColor Blue
+    $helpdeskNoncompliant = ($HelpdeskCases | Where-Object { $_.issues -contains "noncompliant_device" }).Count
 
-    #Write-Host "File :" $HelpDeskReportPath -ForegroundColor Blue
+    $helpdeskPartial = ($HelpdeskCases | Where-Object { $_.status -eq "partial" }).Count
 
-    #Write-Host "Total cases :" $HelpdeskCases.Count -ForegroundColor Blue
+    $helpdeskUnmatched = ($HelpdeskCases | Where-Object { $_.status -eq "unmatched" }).Count
 
- 
-
-# ============================
-
-# BYOD DEVICE MONITOR REPORT
-
-# ============================
+    $helpdeskWorkplace = ($HelpdeskCases | Where-Object { $_.entra_trust_type -eq "Workplace" }).Count
 
  
 
-$helpdeskNoncompliant = ($HelpdeskCases | Where-Object { $_.status -eq "noncompliant" }).Count
+    Write-Host ""
 
-$helpdeskPartial      = ($HelpdeskCases | Where-Object { $_.status -eq "partial" }).Count
+    Write-Host "============================" -ForegroundColor Cyan
 
-$helpdeskUnmatched    = ($HelpdeskCases | Where-Object { $_.status -eq "unmatched" }).Count
+    Write-Host "BYOD DEVICE MONITOR REPORT" -ForegroundColor Cyan
 
-$helpdeskWorkplace    = ($HelpdeskCases | Where-Object { $_.status -eq "workplace" }).Count
+    Write-Host "============================" -ForegroundColor Cyan
 
- 
+    Write-Host ""
 
-Write-Host ""
+    Write-Host "Total Trend devices : $($trendDevices.Count)" -ForegroundColor White
 
-Write-Host "============================" -ForegroundColor Cyan
+    Write-Host ""
 
-Write-Host "BYOD DEVICE MONITOR REPORT" -ForegroundColor Cyan
+    Write-Host "Matched   : $($DevicesMatched.Count)" -ForegroundColor Green
 
-Write-Host "============================" -ForegroundColor Cyan
+    Write-Host "Partial   : $($DevicesPartial.Count)" -ForegroundColor Yellow
 
-Write-Host ""
+    Write-Host "Unmatched : $($DevicesUnmatched.Count)" -ForegroundColor Red
 
-Write-Host "Total Trend devices : $($trendDevices.Count)" -ForegroundColor White
+    Write-Host ""
 
-Write-Host ""
+    Write-Host "Helpdesk cases : $($HelpdeskCases.Count)" -ForegroundColor Magenta
 
-Write-Host "Matched   : $($DevicesMatched.Count)" -ForegroundColor Green
+    Write-Host ""
 
-Write-Host "Partial   : $($DevicesPartial.Count)" -ForegroundColor Yellow
+    Write-Host "Noncompliant : $helpdeskNoncompliant" -ForegroundColor Yellow
 
-Write-Host "Unmatched : $($DevicesUnmatched.Count)" -ForegroundColor Red
+    Write-Host "Partial      : $helpdeskPartial" -ForegroundColor Yellow
 
-Write-Host ""
+    Write-Host "Unmatched    : $helpdeskUnmatched" -ForegroundColor Yellow
 
-Write-Host "Helpdesk cases : $($HelpdeskCases.Count)" -ForegroundColor Magenta
+    Write-Host "Workplace    : $helpdeskWorkplace" -ForegroundColor Yellow
 
-Write-Host ""
+    Write-Host ""
 
-Write-Host "Noncompliant : $helpdeskNoncompliant" -ForegroundColor Yellow
+    Write-Host "Report exported :" -ForegroundColor Cyan
 
-Write-Host "Partial      : $helpdeskPartial" -ForegroundColor Yellow
+    Write-Host $HelpDeskReportPathCsv -ForegroundColor Cyan
 
-Write-Host "Unmatched    : $helpdeskUnmatched" -ForegroundColor Yellow
+    Write-Host $HelpDeskReportPathJson -ForegroundColor Cyan
 
-Write-Host "Workplace    : $helpdeskWorkplace" -ForegroundColor Yellow
+    Write-Host ""
 
-Write-Host ""
-
-Write-Host "Report exported :" -ForegroundColor Cyan
-
-Write-Host $HelpDeskReportPathCsv -ForegroundColor Cyan
-
-Write-Host $HelpDeskReportPathJson -ForegroundColor Cyan
-
-Write-Host ""
-
-Write-Host "============================" -ForegroundColor Cyan
+    Write-Host "============================" -ForegroundColor Cyan
 
  
 
@@ -1316,4 +1367,3 @@ catch {
 
 }
 
- 
