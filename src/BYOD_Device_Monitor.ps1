@@ -68,143 +68,73 @@ write-Host "[STEP] Graph authentification ready" -ForegroundColor Cyan
 # ==============================
 # ENTRA COLLECT (FULL)
 # ==============================
-
-# Collecte complète des devices Entra via pagination @odata.nextLink
-# Output : liste plate de devices (array)
+# Full collection of Entra devices using @odata.nextLink pagination
+# Output: flat list of devices (array)
 # ==============================
 
- 
-
 function Get-AllEntraDevices {
-
     param (
-
         [parameter(Mandatory)] [hashtable] $Headers
-
     )
 
-   
-
     $currentUrl = "https://graph.microsoft.com/v1.0/devices?`$select=deviceId,displayName,trustType,operatingSystem,operatingSystemVersion,approximateLastSignInDateTime,accountEnabled"
-
     $allItems = @()
-
     $pageCount = 0
-
- 
 
     try {
 
- 
-
         while ($currentUrl) {
 
-       
-
             $resp = Invoke-RestMethod -Method GET -Uri $currentUrl -Headers $Headers
-
             $pageCount++
 
- 
-
-            #Write-Host "Calling page $pageCount ..." -ForegroundColor Yellow
-
- 
+            #Write-Host "Calling page $pageCount ..." -ForegroundColor Yellow 
 
             if ($resp.value) {
-
                 $allItems += $resp.value
-
             }
 
- 
-
-            # Gestion du nextLink
-
- 
+            # Management of the nextLink
 
             $nextLink = $null
 
- 
-
             if ($resp.PSObject.Properties.Name -contains '@odata.nextLink') {
-
                 $nextLink = $resp.'@odata.nextLink'
-
             }
-
             elseif ($resp.PSObject.Properties.Name -contains 'nextLink') {
-
                 $nextLink = $resp.nextLink
-
             }
-
- 
 
             #Write-Host ("Page {0} collected | Total so far: {1}" -f `
-
             #    $pageCount, $allItems.Count)
 
- 
-
             $currentUrl = $nextLink
-
         }
-
- 
-
     }
 
     catch {
-
         Write-Error "Erreur Graph Entra : $($_.Exception.Message)"
-
         exit
-
     }
-
     return $allItems
-
- 
-
 }
 
- 
-
 # ==============================
-
-# EXPORT ENTRA
-
+# ENTRA EXPORT
 # ==============================
-
-# Export "raw" : dataset complet Entra (utile pour debug + corrélation future)
-
-# Export "processed" : subset des devices Registered (trustType = Workplace)
-
+# "Raw" export: complete Entra dataset (useful for debugging + future correlation)
+# "Processed" export: subset of Registered devices (trustType = Workplace)
 # ==============================
-
- 
 
 $entraAll = Get-AllEntraDevices -Headers $headers
-
- 
-
 $date = Get-Date -Format "yyyyMMdd-HHmm"
-
- 
-
 $rawFullPath = "data/raw/raw_entra_full_devices_$date.json"
 
- 
 
 $fullExport = [pscustomobject]@{
-
     collectedAt  = (Get-Date).ToString("o")
-
     totalDevices = $entraAll.Count
-
     devices      = $entraAll
-
 }
 
  
@@ -1101,7 +1031,7 @@ try {
 
                 issues             = $device.issues
 
-                entra_trust_type = $device.entra_trust_type
+                entra_trust_type   = $device.entra_trust_type
 
             }
 
