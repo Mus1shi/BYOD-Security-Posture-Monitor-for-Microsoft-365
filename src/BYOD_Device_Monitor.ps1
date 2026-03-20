@@ -1,140 +1,76 @@
-#Objectif du script :
+# Script objective:
 
-#1. Authentification app-only à Microsoft Graph
+#1. App-only authentication to Microsoft Graph
+#2. Extraction of managed devices from Intune
+#3. Data normalization for export
+#4. Enrichment via Entra ID (trustType)
+#5. Preparation of a BYOD risk view
 
-#2. Extraction des devices gérés depuis Intune
-
-#3. Normalisation des données pour export
-
-#4. Enrichissement via Entra ID (trustType)
-
-#5. Préparation d'une vue risque BYOD
-
- 
-
-#récup des identifiants depuis les variable d'env
-
-#évite de stocker directement dans le code
-
- 
+# Retrieve credentials from environment variables
+# Avoid storing them directly in the code
 
 $TenantId = $env:GRAPH_TENANT_ID
-
 $ClientId = $env:GRAPH_CLIENT_ID
-
 $ClientSecret = $env:GRAPH_SECRET
-
 $TrendApiKey = $env:TREND_API_KEY
 
  
 
-#Vérifie que toutes lers valeurs nécessaires sont présentes sinon stop
-
- 
+# Check that all required values are present, otherwise stop
 
 if (-not $TenantId -or -not $ClientId -or -not $ClientSecret -or -not $TrendApiKey) {
-
     throw "varable missed"
-
 }
 
- 
-
-#Stop le script en cas d'erreur
-
- 
+#Stop the script if there is an error
 
 $ErrorActionPreference = "Stop"
 
- 
-
 #==============================
-
 # AUTHENTIFICATION GRAPH (APP-ONLY)
-
 #==============================
 
- 
-
-#Co a Graph avec l'application (mode "app-only")
-
-#Permet au service d'obtenir un token sans utilisateur
-
- 
+# Co to Microsoft Graph using the application (app-only mode)
+# Allows the service to obtain a token without a user
 
 $tokenUri = "https://login.microsoftonline.com/$TenantId/oauth2/v2.0/token"
 
- 
-
-#Corps de la requête
-
-#.default signifie : "donne-moi ttes les perm déjà accordées"
-
- 
+#body request
+#.default means : "give me all the perm already accepted"
 
 $body = @{
-
     Client_id     = $ClientId
-
     scope         = "https://graph.microsoft.com/.default"
-
     client_secret = $ClientSecret
-
     grant_type    = "client_credentials"
-
 }
 
- 
-
-#envoi de la requête pour obtenir un access_token
-
- 
+# Send the request to obtain an access token
 
 $token = Invoke-RestMethod -Method POST -Uri $tokenUri -Body $body -ContentType "application/x-www-form-urlencoded"
 
-Write-Host "Token received OK"
-
- 
+Write-Host "[OK] Graph token acquired" -ForegroundColor Green
 
 if (-not $token.access_token) {
-
     throw "TOKEN ERROR: access_token is empty. Check tenant/client/secret env vars and app credentials."
-
 }
 
-Write-Host "Access token length: $($token.access_token.Length)" -ForegroundColor Green
+Write-Host "Access token length: $($token.access_token.Length)" -ForegroundColor Green 
 
- 
-
-#création de l'en-tête HTTP avec token d'accès
-
-#chaque appel graph doit contenir "Authorization : Bearer <token>"
-
- 
+#creation of the HTTP header with token access
+#each graph call should countain "Authorization : Bearer <token>"
 
 $headers = @{ Authorization = "Bearer $($token.access_token)" }
 
- 
-
-#Affiche les infos de session pour verifier la co
-
- 
-
-Write-Host "Auth token ready" -ForegroundColor Gray
-
-
-
+Write-Host "[OK] Access token validated" -ForegroundColor Green
+write-Host "[STEP] Graph authentification ready" -ForegroundColor Cyan
 
 # ==============================
-
 # ENTRA COLLECT (FULL)
-
 # ==============================
 
 # Collecte complète des devices Entra via pagination @odata.nextLink
-
 # Output : liste plate de devices (array)
-
 # ==============================
 
  
