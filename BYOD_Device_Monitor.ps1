@@ -137,59 +137,52 @@ $fullExport = [pscustomobject]@{
     devices      = $entraAll
 }
 
- 
-
 $fullExport | ConvertTo-Json -Depth 10 | Out-File -FilePath $rawFullPath -Encoding UTF8
 
- 
-
 Write-Host "Full raw export saved to $rawFullPath" -ForegroundColor Gray
-
- 
-
+Write-Host "[OK] Raw Entra export saved" -ForegroundColor Green
 Write-Host "TOTAL Entra devices = $($entraAll.Count)" -ForegroundColor Green
 
- 
 
 # ==============================
-
-# FILTER ENTRA : REGISTERED (WORKPLACE)
-
+# ENTRA FILTER: REGISTERED (WORKPLACE)
 # ==============================
-
-# Registered = device BYOD "registré" (pas forcément managed)
-
-# Utilisé pour la vue BYOD / comparaison avec Intune et Trend
-
+# Registered = BYOD "registered" device (not necessarily managed)
+# Used for BYOD view / comparison with Intune and Trend
 # ==============================
-
- 
 
 $entraRegistered = $entraAll | Where-Object { $_.trustType -eq "Workplace" }
 
- 
+$entraByDeviceId = @{}
+$entraByDisplayName = @{}
 
-Write-Host "Total Entra registered (Workplace) = $($entraRegistered.Count)" -ForegroundColor Green
+foreach ($device in $entraAll) {
+    if ($device.deviceId) {
+        $entraByDeviceId[$device.deviceId] = $device    
+  }else {
+    continue
+ }
+}
 
- 
+foreach ($device in $entraAll) {
+    if ($device.displayName) {
+        $entraByDisplayName[$device.displayName] = $device 
+   }else{
+    continue
+   }
+}
+
+Write-Host "Total Entra registered (workplace) = $($entraRegistered.Count)" -ForegroundColor Green
 
 $registeredPath = "data/processed/entra_registered_devices_$date.json"
 
- 
-
 $registeredExport = [pscustomobject]@{
-
     collectedAt     = (Get-Date).ToString("o")
-
     trustTypeFilter = "Workplace"
-
     totalDevices    = $entraRegistered.Count
-
     devices         = $entraRegistered
-
 }
-
- 
+Write-Host"[OK] Entra Workplace devices: $($entraRegistered.Count)
 
 $registeredExport | ConvertTo-Json -Depth 10 | Out-File -FilePath $registeredPath -Encoding UTF8
 
