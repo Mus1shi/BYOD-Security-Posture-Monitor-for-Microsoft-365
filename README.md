@@ -193,37 +193,43 @@ Running the Demo Version
 
 ### Requirements:
 
-use local test data only
-no production credentials
-mail disabled or mocked
+use local test data only, 
+no production credentials, 
+mail disabled or mocked, 
 Security Note
 
 This is a sanitized public version.
 
 ### Never include:
 
-real credentials
-real tenant data
-internal infrastructure
-production exports
+real credentials,
+real tenant data,
+internal infrastructure,
+production exports,
 Defender Status
 
 Microsoft Defender integration is currently in progress and partially present in the architecture.
 
 Roadmap
+
 Defender enrichment
+
 KB / Windows Update visibility
+
 historical tracking
+
 dashboard / UI
+
 automation / remediation
+
 Why This Project Matters
 
 Device visibility is fragmented.
 
 ### A device may exist in:
 
-endpoint security
-identity systems
+endpoint security, 
+identity systems, 
 management platforms
 
 …without being consistently tracked everywhere.
@@ -234,9 +240,10 @@ Technical Positioning
 
 This is a security engineering prototype focused on:
 
-real-world visibility problems
-automation
+real-world visibility problems, 
+automation, 
 actionable reporting
+
 Author
 
 Tommy Vlassiou
