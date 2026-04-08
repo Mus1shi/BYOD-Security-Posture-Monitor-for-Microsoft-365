@@ -127,3 +127,117 @@ Device-Security-Posture-Monitor/
 │   └── sample/
 │
 └── README.md
+
+Main Pipeline
+Load configuration
+Authenticate to Microsoft Graph
+Collect Entra ID devices
+Collect Intune devices
+Load or collect Trend endpoints
+Correlate devices across sources
+Apply risk classification
+Export reports
+Optionally prepare notification output
+Main Outputs
+Full consolidated JSON report
+
+Complete dataset for:
+
+dashboards
+automation
+analysis
+Helpdesk report
+CSV + JSON
+actionable cases only
+Entra-only report
+
+Devices present in Entra but not seen in Trend
+
+Probable personal device report
+
+Suspected unmanaged or personal endpoints
+
+Enriched Intune export
+
+Normalized dataset for review
+
+Risk Model
+
+Each device is evaluated based on:
+
+source presence mismatch
+compliance status
+partial visibility
+personal device signals
+duplicate hostname
+inactivity
+visibility gaps
+
+Outputs include:
+
+issues
+visual_tag
+recommended_action
+risk_score
+risk_level
+priority
+Sample Data
+
+This repository is intended to run with:
+
+fake data
+anonymized datasets
+realistic but non-sensitive structures
+Running the Demo Version
+.\src\Main.ps1
+
+Requirements:
+
+use local test data only
+no production credentials
+mail disabled or mocked
+Security Note
+
+This is a sanitized public version.
+
+Never include:
+
+real credentials
+real tenant data
+internal infrastructure
+production exports
+Defender Status
+
+Microsoft Defender integration is currently in progress and partially present in the architecture.
+
+Roadmap
+Defender enrichment
+KB / Windows Update visibility
+historical tracking
+dashboard / UI
+automation / remediation
+Why This Project Matters
+
+Device visibility is fragmented.
+
+A device may exist in:
+
+endpoint security
+identity systems
+management platforms
+
+…without being consistently tracked everywhere.
+
+This project addresses that gap.
+
+Technical Positioning
+
+This is a security engineering prototype focused on:
+
+real-world visibility problems
+automation
+actionable reporting
+Author
+
+Tommy Vlassiou
+Junior Cybersecurity Analyst / Microsoft Security / PowerShell Automation
