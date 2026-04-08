@@ -1,113 +1,157 @@
 # =====================================================
-# TREND DATA LOADING - PUBLIC DEMO VERSION
+# TREND VISION ONE - FULL ENDPOINT COLLECTION
+# PUBLIC DEMO / OPTIONAL LIVE COLLECTION VERSION
 # =====================================================
 # Purpose:
-# Load Trend endpoint data either from:
-# - a local sample JSON file (demo mode)
-# - the latest processed Trend workstation file (local mode)
+# Collect Trend Vision One endpoints through API pagination,
+# export the raw full dataset, then generate a processed
+# workstation-only dataset.
 #
-# Trend remains the starting point of the correlation flow
-# because it represents devices actively seen by endpoint
-# security tooling.
+# Public repository note:
+# - this function is optional
+# - it is disabled by default in demo mode
+# - it requires a valid TREND_API_KEY in environment variables
 # =====================================================
 
-function Get-TrendDevices {
+function Invoke-TrendCollectEndpoint {
     param (
+        [Parameter(Mandatory)]
+        [string]$RawDataPath,
+
+        [Parameter(Mandatory)]
         [string]$ProcessedDataPath,
-        [switch]$DemoMode,
-        [string]$SampleTrendFile
+
+        [string]$ApiKey = $env:TREND_API_KEY,
+
+        [string]$BaseUrl = "https://api.eu.xdr.trendmicro.com",
+
+        [switch]$NoPreview
     )
 
-    Write-Host "[STEP] Loading Trend devices" -ForegroundColor Cyan
+    Write-Host "[STEP] Starting Trend endpoint collection" -ForegroundColor Cyan
 
-    $trendDevices = @()
-    $sourceFile = $null
+    if (-not $ApiKey) {
+        throw "TREND_API_KEY is missing. Live Trend collection requires a valid API key in environment variables or via -ApiKey."
+    }
+
+    foreach ($folder in @($RawDataPath, $ProcessedDataPath)) {
+        if (-not (Test-Path $folder)) {
+            New-Item -Path $folder -ItemType Directory -Force | Out-Null
+        }
+    }
+
+    $endpointUrl = "$BaseUrl/v3.0/endpointSecurity/endpoints"
+
+    $headers = @{
+        Authorization = "Bearer $ApiKey"
+        "Content-Type" = "application/json"
+    }
+
+    $currentUrl = $endpointUrl
+    $allItems = @()
+    $pageCount = 0
+
+    try {
+        while ($currentUrl) {
+            $pageCount++
+
+            $response = Invoke-RestMethod `
+                -Method GET `
+                -Uri $currentUrl `
+                -Headers $headers
+
+            if ($response.items) {
+                $allItems += $response.items
+            }
+            elseif ($response.value) {
+                $allItems += $response.value
+            }
+
+            $nextLink = $null
+
+            if ($response.PSObject.Properties.Name -contains "@odata.nextLink") {
+                $nextLink = $response.'@odata.nextLink'
+            }
+            elseif ($response.PSObject.Properties.Name -contains "nextLink") {
+                $nextLink = $response.nextLink
+            }
+
+            if ($pageCount % 5 -eq 0) {
+                Write-Host "[INFO] Trend pages processed: $pageCount | Total endpoints so far: $($allItems.Count)" -ForegroundColor White
+            }
+
+            $currentUrl = $nextLink
+        }
+    }
+    catch {
+        throw "Trend Vision One API collection failed: $($_.Exception.Message)"
+    }
+
+    Write-Host "[OK] Trend collection complete" -ForegroundColor Green
+    Write-Host "[INFO] Total endpoints collected: $($allItems.Count)" -ForegroundColor White
+    Write-Host "[INFO] Pages processed: $pageCount" -ForegroundColor White
 
     # =====================================================
-    # DEMO MODE - LOAD LOCAL SAMPLE FILE
+    # EXPORT RAW FULL DATASET
     # =====================================================
-    if ($DemoMode) {
-        Write-Host "[INFO] Demo mode active - loading sample Trend dataset" -ForegroundColor White
+    $date = Get-Date -Format "yyyyMMdd-HHmm"
 
-        if (-not $SampleTrendFile) {
-            throw "Demo mode is enabled, but no SampleTrendFile path was provided."
-        }
+    $rawFullPath = Join-Path $RawDataPath "raw_trend_endpoints_full_$date.json"
 
-        if (-not (Test-Path $SampleTrendFile)) {
-            throw "Sample Trend file not found: $SampleTrendFile"
-        }
-
-        $sampleContent = Get-Content -Path $SampleTrendFile -Raw | ConvertFrom-Json
-        $sourceFile = $SampleTrendFile
-
-        if ($sampleContent.items) {
-            $trendDevices = @($sampleContent.items)
-        }
-        elseif ($sampleContent.devices) {
-            $trendDevices = @($sampleContent.devices)
-        }
-        elseif ($sampleContent.value) {
-            $trendDevices = @($sampleContent.value)
-        }
-        elseif ($sampleContent -is [System.Collections.IEnumerable]) {
-            $trendDevices = @($sampleContent)
-        }
-        else {
-            throw "Sample Trend file format is not recognized. Expected an array, an 'items' property, a 'devices' property, or a 'value' property."
-        }
-
-        Write-Host "[OK] Sample Trend devices loaded: $($trendDevices.Count)" -ForegroundColor Green
-        Write-Host "[INFO] Trend source file: $sourceFile" -ForegroundColor White
-
-        return [PSCustomObject]@{
-            Devices    = $trendDevices
-            SourceFile = $sourceFile
-        }
+    $fullExport = [PSCustomObject]@{
+        collectedAt = (Get-Date).ToString("o")
+        source      = "trend_vision_one_api"
+        pages       = $pageCount
+        totalItems  = $allItems.Count
+        items       = $allItems
     }
+
+    $fullExport | ConvertTo-Json -Depth 10 | Out-File -FilePath $rawFullPath -Encoding UTF8
+
+    Write-Host "[OK] Raw Trend export saved: $rawFullPath" -ForegroundColor Green
 
     # =====================================================
-    # LOCAL PROCESSED FILE MODE
+    # FILTER WORKSTATIONS
     # =====================================================
-    if (-not $ProcessedDataPath) {
-        throw "ProcessedDataPath is required when not running in demo mode."
+    $workstations = $allItems | Where-Object {
+        $_.osName -and $_.osName -notmatch "Server"
     }
 
-    if (-not (Test-Path $ProcessedDataPath)) {
-        throw "Processed data path not found: $ProcessedDataPath"
+    Write-Host "[INFO] Workstations detected: $($workstations.Count)" -ForegroundColor Magenta
+
+    # =====================================================
+    # EXPORT PROCESSED WORKSTATION DATASET
+    # =====================================================
+    $workstationsPath = Join-Path $ProcessedDataPath "trend_workstations_$date.json"
+
+    $processedExport = [PSCustomObject]@{
+        collectedAt = (Get-Date).ToString("o")
+        source      = "trend_vision_one_api"
+        totalItems  = $workstations.Count
+        devices     = $workstations
     }
 
-    $trendFile = Get-ChildItem -Path $ProcessedDataPath -Filter "trend_workstations_*.json" -ErrorAction SilentlyContinue |
-        Sort-Object -Property LastWriteTime |
-        Select-Object -Last 1
+    $processedExport | ConvertTo-Json -Depth 10 | Out-File -FilePath $workstationsPath -Encoding UTF8
 
-    if (-not $trendFile) {
-        throw "No Trend workstation file found in $ProcessedDataPath"
-    }
+    Write-Host "[OK] Processed workstation export saved: $workstationsPath" -ForegroundColor Green
 
-    $trendJson = Get-Content -Path $trendFile.FullName -Raw | ConvertFrom-Json
-    $sourceFile = $trendFile.FullName
+    # =====================================================
+    # OPTIONAL PREVIEW
+    # =====================================================
+    if (-not $NoPreview) {
+        Write-Host "[STEP] Preview of first 20 Trend workstations" -ForegroundColor Cyan
 
-    if ($trendJson.items) {
-        $trendDevices = @($trendJson.items)
+        $workstations |
+            Select-Object endpointName, osName, agentVersion, lastSeen, healthStatus |
+            Select-Object -First 20 |
+            Format-Table
     }
-    elseif ($trendJson.devices) {
-        $trendDevices = @($trendJson.devices)
-    }
-    elseif ($trendJson.value) {
-        $trendDevices = @($trendJson.value)
-    }
-    elseif ($trendJson -is [System.Collections.IEnumerable]) {
-        $trendDevices = @($trendJson)
-    }
-    else {
-        throw "Trend processed file format is not recognized. Expected an array, an 'items' property, a 'devices' property, or a 'value' property."
-    }
-
-    Write-Host "[OK] Trend devices loaded: $($trendDevices.Count)" -ForegroundColor Green
-    Write-Host "[INFO] Trend source file: $sourceFile" -ForegroundColor White
 
     return [PSCustomObject]@{
-        Devices    = $trendDevices
-        SourceFile = $sourceFile
+        RawFullPath       = $rawFullPath
+        WorkstationsPath  = $workstationsPath
+        TotalItems        = $allItems.Count
+        WorkstationsCount = $workstations.Count
+        PagesProcessed    = $pageCount
     }
 }
