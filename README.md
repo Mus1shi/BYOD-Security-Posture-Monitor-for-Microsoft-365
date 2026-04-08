@@ -128,7 +128,7 @@ Device-Security-Posture-Monitor/
 │
 └── README.md
 
-Main Pipeline
+## Main Pipeline
 Load configuration
 Authenticate to Microsoft Graph
 Collect Entra ID devices
@@ -141,7 +141,7 @@ Optionally prepare notification output
 Main Outputs
 Full consolidated JSON report
 
-Complete dataset for:
+## Complete dataset for:
 
 dashboards
 automation
@@ -163,7 +163,7 @@ Normalized dataset for review
 
 Risk Model
 
-Each device is evaluated based on:
+### Each device is evaluated based on:
 
 source presence mismatch
 compliance status
@@ -173,7 +173,7 @@ duplicate hostname
 inactivity
 visibility gaps
 
-Outputs include:
+### Outputs include:
 
 issues
 visual_tag
@@ -183,7 +183,7 @@ risk_level
 priority
 Sample Data
 
-This repository is intended to run with:
+### This repository is intended to run with:
 
 fake data
 anonymized datasets
@@ -191,7 +191,7 @@ realistic but non-sensitive structures
 Running the Demo Version
 .\src\Main.ps1
 
-Requirements:
+### Requirements:
 
 use local test data only
 no production credentials
@@ -200,7 +200,7 @@ Security Note
 
 This is a sanitized public version.
 
-Never include:
+### Never include:
 
 real credentials
 real tenant data
@@ -220,7 +220,7 @@ Why This Project Matters
 
 Device visibility is fragmented.
 
-A device may exist in:
+### A device may exist in:
 
 endpoint security
 identity systems
