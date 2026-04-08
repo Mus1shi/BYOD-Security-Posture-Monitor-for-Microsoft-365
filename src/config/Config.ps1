@@ -1,172 +1,166 @@
 # =====================================================
-# PROJECT CONFIGURATION
+# GLOBAL CONFIGURATION - PUBLIC DEMO VERSION
 # =====================================================
 # Purpose:
-# Central configuration file for the BYOD Device Monitor.
+# Central configuration file for the public demo edition
+# of the Device Security Posture Monitor project.
 #
-# Public GitHub version:
-# - Safe by default
-# - Demo mode enabled by default
-# - No real secrets stored here
-# - Uses local fake sample datasets
-#
-# Available modes:
-# - Demo : uses fake sample files stored in /data
-# - Live : uses real Microsoft Graph / Trend / SMTP settings
+# This version is designed to run with:
+# - fake / sample data
+# - local demo paths
+# - no production credentials
+# - mail disabled by default
 #
 # Important:
-# This public file must never contain production secrets.
-# Real internal values should stay in a private, ignored file.
+# Do not store any real secret, tenant ID, internal email,
+# or infrastructure detail in this file.
 # =====================================================
 
 # =====================================================
-# EXECUTION MODE
-# =====================================================
-# Demo:
-#   Safe public mode for GitHub and portfolio usage.
-#   No real API calls should be required.
-#
-# Live:
-#   Internal/private mode using real services.
+# GENERAL EXECUTION MODE
 # =====================================================
 
-$Mode = "Demo"
-
-# =====================================================
-# OPTIONAL FEATURES
-# =====================================================
-# Enable or disable optional project features.
-#
-# EnableMail:
-# - false = safe default for GitHub demo
-# - true  = allows SMTP email sending if properly configured
-# =====================================================
-
+$DemoMode = $true
+$EnableGraphCollection = $false
+$EnableTrendApiCollection = $false
 $EnableMail = $false
+$EnableDefender = $false
 
 # =====================================================
-# PROJECT ROOT
+# OPTIONAL LOCAL SECRET LOADER
 # =====================================================
-# $PSScriptRoot here points to:
-#   <repo>\src\config
-#
-# We go up two levels to reach the repository root.
-# =====================================================
-
-$ProjectRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
-
-# =====================================================
-# FOLDER STRUCTURE
-# =====================================================
-# Centralize all important project folders.
-# This makes the project easier to move and clone.
+# In the public version, secret loading is optional.
+# The script can run in demo mode without any real secret.
+# If you later want to test API collection locally,
+# you can use environment variables or your own local setup.
 # =====================================================
 
-$DataPath = Join-Path $ProjectRoot "data"
+$LoadSecretsHelper = Join-Path $PSScriptRoot "Load-Secrets.ps1"
 
-$RawDataPath = Join-Path $DataPath "raw"
-$ProcessedDataPath = Join-Path $DataPath "processed"
-$ReportsPath = Join-Path $DataPath "reports"
+if (Test-Path $LoadSecretsHelper) {
+    . $LoadSecretsHelper
+}
 
 # =====================================================
-# SAMPLE DATASET PATHS (DEMO MODE)
+# PUBLIC PLACEHOLDER CREDENTIALS
 # =====================================================
-# These files are fake datasets used for the public demo.
-# They should contain realistic but non-sensitive values.
+# Demo mode does not require real values.
+# These placeholders are intentionally non-functional.
 # =====================================================
 
-$SampleTrendPath = Join-Path $RawDataPath "sample_trend_endpoints.json"
-$SampleIntunePath = Join-Path $ProcessedDataPath "sample_intune_devices.csv"
-$SampleEntraPath = Join-Path $ReportsPath "sample_entra_devices.json"
+$TenantId = $env:GRAPH_TENANT_ID
+$ClientId = $env:GRAPH_CLIENT_ID
+$ClientSecret = $env:GRAPH_CLIENT_SECRET
+
+$TrendApiKey = $env:TREND_API_KEY
+
+$DefenderTenantId = $env:DEFENDER_TENANT_ID
+$DefenderClientId = $env:DEFENDER_CLIENT_ID
+$DefenderClientSecret = $env:DEFENDER_CLIENT_SECRET
 
 # =====================================================
 # TREND CACHE SETTINGS
 # =====================================================
-# In Live mode, if a recent Trend workstation file already
-# exists, the script can reuse it instead of collecting again.
-#
-# In Demo mode, this setting has no real impact.
-# =====================================================
 
-$TrendCacheMaxAgeHours = 4
+$TrendCacheMaxAgeHours = 12
 
 # =====================================================
-# MICROSOFT GRAPH SETTINGS (LIVE MODE ONLY)
+# MAIL SETTINGS - PUBLIC DEMO
 # =====================================================
-# These values must remain empty in the public GitHub version.
-#
-# Private/internal usage:
-# - Load them securely from environment variables
-# - Or load them from a private local file excluded by .gitignore
-#
-# Never commit real tenant IDs, client IDs, or client secrets.
+# Mail is disabled by default in the public version.
+# These values are placeholders only.
 # =====================================================
 
-$TenantId = ""
-$ClientId = ""
-$ClientSecret = ""
+$EmailRecipient = "demo-recipient@example.com"
+$EmailSender    = "demo-monitor@example.com"
+$SmtpServer     = "smtp.example.com"
+$SmtpPort       = 25
 
 # =====================================================
-# TREND API SETTINGS (LIVE MODE ONLY)
+# PROJECT PATH INITIALIZATION
 # =====================================================
-# The Trend API key should never be stored here in the
-# public repository.
-#
-# The collection script should read it from:
-#   $env:TREND_API_KEY
+# Build project-relative paths used by the demo version.
 # =====================================================
 
-# No direct Trend API key is stored in this public config.
+$ScriptRoot  = Split-Path -Parent $MyInvocation.MyCommand.Path
+$SrcRoot     = Split-Path -Parent $ScriptRoot
+$ProjectRoot = Split-Path -Parent $SrcRoot
 
-# =====================================================
-# SMTP / EMAIL SETTINGS (LIVE MODE ONLY)
-# =====================================================
-# Safe public defaults:
-# - empty sender
-# - empty recipient
-# - empty SMTP server
-#
-# This prevents accidental mail sending in the demo version.
-# =====================================================
+$DataPath          = Join-Path $ProjectRoot "data"
+$RawDataPath       = Join-Path $DataPath "raw"
+$ProcessedDataPath = Join-Path $DataPath "processed"
+$ReportsPath       = Join-Path $DataPath "reports"
+$SampleDataPath    = Join-Path $DataPath "sample"
+$InfraFilesPath    = Join-Path $DataPath "infra_files"
 
-$EmailRecipient = ""
-$EmailSender = ""
-$SmtpServer = ""
-$SmtpPort = 25
-
-# =====================================================
-# OPTIONAL DEMO LABELS / METADATA
-# =====================================================
-# These optional values help make logs and future README
-# explanations clearer.
-# =====================================================
-
-$ProjectName = "BYOD Device Monitor"
-$ProjectVersion = "1.0-demo-public"
-
-# =====================================================
-# DIRECTORY INITIALIZATION
-# =====================================================
-# Ensure project data folders exist before the main script
-# starts working with files.
-#
-# This improves first-run experience after cloning the repo.
-# =====================================================
-
-foreach ($folder in @($DataPath, $RawDataPath, $ProcessedDataPath, $ReportsPath)) {
+foreach ($folder in @(
+    $DataPath,
+    $RawDataPath,
+    $ProcessedDataPath,
+    $ReportsPath,
+    $SampleDataPath,
+    $InfraFilesPath
+)) {
     if (-not (Test-Path $folder)) {
         New-Item -Path $folder -ItemType Directory -Force | Out-Null
     }
 }
 
 # =====================================================
-# EXECUTION BANNER
+# DEMO INPUT FILES
 # =====================================================
-# Optional console feedback to make startup clearer.
+# These sample files are used by the public demo version.
+# Adjust names if your sample dataset filenames differ.
 # =====================================================
 
-Write-Host "[CONFIG] Project loaded: $ProjectName" -ForegroundColor Cyan
-Write-Host "[CONFIG] Version: $ProjectVersion" -ForegroundColor Cyan
-Write-Host "[CONFIG] Mode: $Mode" -ForegroundColor Cyan
-Write-Host "[CONFIG] Mail enabled: $EnableMail" -ForegroundColor Cyan
-Write-Host "[CONFIG] Project root: $ProjectRoot" -ForegroundColor DarkGray
+$SampleTrendFile  = Join-Path $SampleDataPath "sample_trend_workstations.json"
+$SampleEntraFile  = Join-Path $SampleDataPath "sample_entra_devices.json"
+$SampleIntuneFile = Join-Path $SampleDataPath "sample_intune_devices.json"
+
+# =====================================================
+# EXECUTION VALIDATION
+# =====================================================
+# In demo mode:
+# - no secret is mandatory
+# - no live API dependency should block execution
+#
+# In live mode:
+# - required credentials must be provided explicitly
+# =====================================================
+
+if (-not $DemoMode) {
+    if ($EnableGraphCollection -and (-not $TenantId -or -not $ClientId -or -not $ClientSecret)) {
+        throw "Graph collection is enabled, but Graph credentials are missing."
+    }
+
+    if ($EnableTrendApiCollection -and -not $TrendApiKey) {
+        throw "Trend API collection is enabled, but TREND_API_KEY is missing."
+    }
+
+    if ($EnableDefender -and (-not $DefenderTenantId -or -not $DefenderClientId -or -not $DefenderClientSecret)) {
+        throw "Defender collection is enabled, but Defender credentials are missing."
+    }
+
+    if ($EnableMail) {
+        if (-not $EmailRecipient -or -not $EmailSender -or -not $SmtpServer -or -not $SmtpPort) {
+            throw "Mail is enabled, but one or more SMTP settings are missing."
+        }
+    }
+}
+
+# =====================================================
+# GLOBAL POWERSHELL BEHAVIOR
+# =====================================================
+
+$ErrorActionPreference = "Stop"
+
+# =====================================================
+# EXECUTION BANNER
+# =====================================================
+
+Write-Host "[OK] Public demo configuration loaded" -ForegroundColor Green
+Write-Host "[INFO] Demo mode: $DemoMode" -ForegroundColor White
+Write-Host "[INFO] Graph collection enabled: $EnableGraphCollection" -ForegroundColor White
+Write-Host "[INFO] Trend API collection enabled: $EnableTrendApiCollection" -ForegroundColor White
+Write-Host "[INFO] Defender enabled: $EnableDefender" -ForegroundColor White
+Write-Host "[INFO] Mail enabled: $EnableMail" -ForegroundColor White
