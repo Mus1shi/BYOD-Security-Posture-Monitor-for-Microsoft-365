@@ -1,55 +1,51 @@
 # =====================================================
-# LOAD SECRET FROM LOCAL ENCRYPTED STORAGE
+# OPTIONAL SECRET LOADER - PUBLIC DEMO VERSION
 # =====================================================
 # Purpose:
-# Load a previously saved secret and return it
-# as a usable plain string.
+# Provide a helper function to read locally stored
+# encrypted secrets from XML files.
 #
-# Usage example:
-# $ClientSecret = Load-Secret -Name "GraphClientSecret"
-# $TrendKey = Load-Secret -Name "TrendApiKey"
+# Public repository note:
+# - this helper is optional
+# - demo mode does not require it
+# - it is intended only for local lab usage
+#
+# Security note:
+# Export-Clixml / Import-Clixml secure strings are tied
+# to the same Windows user on the same machine.
 # =====================================================
 
-function Load-Secret {
-
-    param(
+function Get-PlainTextSecretFromXml {
+    param (
         [Parameter(Mandatory)]
-        [string]$Name
+        [string]$Path
     )
 
-    Write-Host "[STEP] Loading secret: $Name" -ForegroundColor Cyan
-
-    # -----------------------------------------
-    # Define storage path
-    # -----------------------------------------
-    $secretFolder = Join-Path $env:USERPROFILE ".byod-secrets"
-    $secretPath = Join-Path $secretFolder "$Name.xml"
-
-    if (-not (Test-Path $secretPath)) {
-        throw "Secret not found: $secretPath"
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        throw "Secret path is missing."
     }
 
-    # -----------------------------------------
-    # Read encrypted content
-    # -----------------------------------------
-    $encrypted = Get-Content -Path $secretPath
+    if (-not (Test-Path $Path)) {
+        throw "Secret file not found: $Path"
+    }
 
-    # -----------------------------------------
-    # Convert back to SecureString
-    # -----------------------------------------
-    $secureValue = $encrypted | ConvertTo-SecureString
+    try {
+        $secureSecret = Import-Clixml -Path $Path
 
-    # -----------------------------------------
-    # Convert SecureString to plain text
-    # (required for API usage)
-    # -----------------------------------------
-    $ptr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureValue)
-    $plainText = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($ptr)
+        if (-not $secureSecret) {
+            throw "Imported secret is empty: $Path"
+        }
 
-    # Clean memory
-    [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ptr)
+        $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureSecret)
 
-    Write-Host "[OK] Secret loaded successfully" -ForegroundColor Green
-
-    return $plainText
+        try {
+            return [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
+        }
+        finally {
+            [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+        }
+    }
+    catch {
+        throw "Failed to load secret from XML file '$Path': $($_.Exception.Message)"
+    }
 }
