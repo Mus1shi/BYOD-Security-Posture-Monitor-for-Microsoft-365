@@ -1,261 +1,148 @@
 # =====================================================
-# INTUNE DEVICE COLLECTION
+# INTUNE DEVICE COLLECTION - PUBLIC DEMO VERSION
 # =====================================================
 # Purpose:
-# Collect Intune managed devices from Microsoft Graph in Live mode
-# or load a fake sample dataset in Demo mode.
-#
-# Exposed functions:
-# - Get-IntuneDevices
-# - Get-IntuneDevicesFromSample
-#
-# Output structure:
-# Both functions return the same object format:
-# @{
-#     CleanDevices = <array>
-#     ByDeviceId   = <hashtable>
-# }
-#
-# Matching logic:
-# Intune azureADDeviceId is matched against Entra deviceId.
+# Retrieve the full Intune managed device inventory either
+# from Microsoft Graph (live mode) or from a local sample
+# JSON file (demo mode), then normalize and enrich it with
+# Entra trust type information.
 # =====================================================
 
 function Get-IntuneDevices {
     param (
-        [Parameter(Mandatory)]
         [hashtable]$Headers,
-
-        [Parameter(Mandatory)]
-        [hashtable]$EntraByDeviceId
+        [hashtable]$EntraByDeviceId,
+        [switch]$DemoMode,
+        [string]$SampleIntuneFile
     )
 
     Write-Host "[STEP] Collecting Intune devices" -ForegroundColor Cyan
 
-    # -------------------------------------------------
-    # Microsoft Graph endpoint
-    # -------------------------------------------------
-    # We request only the fields needed for:
-    # - correlation
-    # - risk analysis
-    # - reporting
-    # -------------------------------------------------
-    $baseUrl = "https://graph.microsoft.com/v1.0/deviceManagement/managedDevices"
-    $selectFields = @(
-        "id",
-        "deviceName",
-        "userPrincipalName",
-        "complianceState",
-        "operatingSystem",
-        "osVersion",
-        "enrolledDateTime",
-        "azureADDeviceId",
-        "managedDeviceOwnerType"
-    ) -join ","
-
-    $currentUrl = "$baseUrl?`$select=$selectFields"
-    $rawDevices = @()
-    $pageCount = 0
-
-    try {
-        while ($currentUrl) {
-            $pageCount++
-
-            $response = Invoke-RestMethod `
-                -Method GET `
-                -Uri $currentUrl `
-                -Headers $Headers `
-                -ErrorAction Stop
-
-            if ($response.value) {
-                $rawDevices += $response.value
-            }
-
-            $nextLink = $null
-
-            if ($response.PSObject.Properties.Name -contains "@odata.nextLink") {
-                $nextLink = $response.'@odata.nextLink'
-            }
-            elseif ($response.PSObject.Properties.Name -contains "nextLink") {
-                $nextLink = $response.nextLink
-            }
-
-            if ($pageCount % 5 -eq 0) {
-                Write-Host "[INFO] Intune pages processed: $pageCount | Total devices so far: $($rawDevices.Count)" -ForegroundColor White
-            }
-
-            $currentUrl = $nextLink
-        }
-    }
-    catch {
-        throw "Microsoft Graph Intune device collection failed: $($_.Exception.Message)"
-    }
-
-    if (-not $rawDevices -or $rawDevices.Count -eq 0) {
-        throw "No Intune devices were collected from Microsoft Graph."
-    }
-
-    Write-Host "[OK] Intune raw devices: $($rawDevices.Count)" -ForegroundColor Green
-
-    # -------------------------------------------------
-    # Build lookup table
-    # -------------------------------------------------
-    # Key = Intune azureADDeviceId
-    # Value = normalized clean export object
-    # -------------------------------------------------
-    $intuneByDeviceId = @()
-    $intuneByDeviceId = @{}
-
-    $cleanDevices = @()
-
-    foreach ($device in $rawDevices) {
-
-        # ---------------------------------------------
-        # Normalize Intune export fields
-        # ---------------------------------------------
-        # Keep a stable output format for reports and
-        # future public demo usage.
-        # ---------------------------------------------
-        $cleanDevice = [PSCustomObject]@{
-            SERIAL_NUMBER      = $null
-            DEVICE             = $device.deviceName
-            USER               = $device.userPrincipalName
-            COMPLIANCE         = $device.complianceState
-            OS                 = $device.operatingSystem
-            OS_VERSION         = $device.osVersion
-            ENROLLED_DATE      = $device.enrolledDateTime
-            INTUNE_DEVICE_ID   = $device.id
-            AZURE_AD_DEVICE_ID = $device.azureADDeviceId
-            OWNERSHIP_INTUNE   = $device.managedDeviceOwnerType
-        }
-
-        $cleanDevices += $cleanDevice
-
-        if ($device.azureADDeviceId) {
-            $intuneByDeviceId[$device.azureADDeviceId] = $cleanDevice
-        }
-    }
-
-    Write-Host "[OK] Intune enrichment done" -ForegroundColor Green
-
-    return [PSCustomObject]@{
-        CleanDevices = $cleanDevices
-        ByDeviceId   = $intuneByDeviceId
-    }
-}
-
-function Get-IntuneDevicesFromSample {
-    param (
-        [Parameter(Mandatory)]
-        [string]$SamplePath,
-
-        [Parameter(Mandatory)]
-        [hashtable]$EntraByDeviceId
+    # =====================================================
+    # PROPERTIES USED FOR NORMALIZATION
+    # =====================================================
+    $props = @(
+        @{ expression = { $_.serialNumber };           label = 'SERIAL_NUMBER' },
+        @{ expression = { $_.deviceName };             label = 'DEVICE' },
+        @{ expression = { $_.userPrincipalName };      label = 'USER' },
+        @{ expression = { $_.complianceState };        label = 'COMPLIANCE' },
+        @{ expression = { $_.operatingSystem };        label = 'OS' },
+        @{ expression = { $_.osVersion };              label = 'OS_VERSION' },
+        @{ expression = { $_.enrolledDateTime };       label = 'ENROLLED_DATE' },
+        @{ expression = { $_.lastSyncDateTime };       label = 'LAST_SYNC' },
+        @{ expression = { $_.id };                     label = 'INTUNE_DEVICE_ID' },
+        @{ expression = { $_.azureADDeviceId };        label = 'AZURE_AD_DEVICE_ID' },
+        @{ expression = { $_.managedDeviceOwnerType }; label = 'OWNERSHIP_INTUNE' }
     )
 
-    Write-Host "[STEP] Loading Intune sample devices" -ForegroundColor Cyan
+    $allDevices = @()
 
-    if (-not (Test-Path $SamplePath)) {
-        throw "Intune sample file not found: $SamplePath"
+    # =====================================================
+    # DEMO MODE - LOAD LOCAL SAMPLE FILE
+    # =====================================================
+    if ($DemoMode) {
+        Write-Host "[INFO] Demo mode active - loading sample Intune dataset" -ForegroundColor White
+
+        if (-not $SampleIntuneFile) {
+            throw "Demo mode is enabled, but no SampleIntuneFile path was provided."
+        }
+
+        if (-not (Test-Path $SampleIntuneFile)) {
+            throw "Sample Intune file not found: $SampleIntuneFile"
+        }
+
+        $sampleContent = Get-Content -Path $SampleIntuneFile -Raw | ConvertFrom-Json
+
+        if ($sampleContent.devices) {
+            $allDevices = @($sampleContent.devices)
+        }
+        elseif ($sampleContent.value) {
+            $allDevices = @($sampleContent.value)
+        }
+        elseif ($sampleContent -is [System.Collections.IEnumerable]) {
+            $allDevices = @($sampleContent)
+        }
+        else {
+            throw "Sample Intune file format is not recognized. Expected an array, a 'devices' property, or a 'value' property."
+        }
+
+        Write-Host "[OK] Sample Intune devices loaded: $($allDevices.Count)" -ForegroundColor Green
     }
 
-    # -------------------------------------------------
-    # Import CSV sample file
-    # -------------------------------------------------
-    # Expected demo format:
-    # SERIAL_NUMBER;DEVICE;USER;COMPLIANCE;OS;OS_VERSION;
-    # ENROLLED_DATE;INTUNE_DEVICE_ID;AZURE_AD_DEVICE_ID;OWNERSHIP_INTUNE
-    # -------------------------------------------------
-    try {
-        $rawDevices = Import-Csv -Path $SamplePath -Delimiter ";" -ErrorAction Stop
-    }
-    catch {
-        throw "Failed to read Intune sample file: $($_.Exception.Message)"
-    }
+    # =====================================================
+    # LIVE MODE - MICROSOFT GRAPH
+    # =====================================================
+    else {
+        if (-not $Headers) {
+            throw "Live Intune collection requires Graph headers."
+        }
 
-    if (-not $rawDevices -or $rawDevices.Count -eq 0) {
-        throw "Intune sample dataset is empty."
-    }
+        $url = "https://graph.microsoft.com/v1.0/deviceManagement/managedDevices?`$select=serialNumber,deviceName,userPrincipalName,operatingSystem,osVersion,complianceState,enrolledDateTime,lastSyncDateTime,id,azureADDeviceId,managedDeviceOwnerType"
 
-    $cleanDevices = @()
-    $intuneByDeviceId = @{}
+        while ($url) {
+            $response = Invoke-RestMethod -Method GET -Uri $url -Headers $Headers
 
-    foreach ($device in $rawDevices) {
+            if ($response.value) {
+                $allDevices += $response.value
+            }
 
-        # ---------------------------------------------
-        # Defensive normalization
-        # ---------------------------------------------
-        # Ensure the required demo columns exist even
-        # if the sample file is incomplete.
-        # ---------------------------------------------
-        $requiredFields = @(
-            "SERIAL_NUMBER",
-            "DEVICE",
-            "USER",
-            "COMPLIANCE",
-            "OS",
-            "OS_VERSION",
-            "ENROLLED_DATE",
-            "INTUNE_DEVICE_ID",
-            "AZURE_AD_DEVICE_ID",
-            "OWNERSHIP_INTUNE"
-        )
-
-        foreach ($field in $requiredFields) {
-            if (-not ($device.PSObject.Properties.Name -contains $field)) {
-                $device | Add-Member -NotePropertyName $field -NotePropertyValue $null -Force
+            if ($response.PSObject.Properties.Name -contains '@odata.nextLink') {
+                $url = $response.'@odata.nextLink'
+            }
+            elseif ($response.PSObject.Properties.Name -contains 'nextLink') {
+                $url = $response.nextLink
+            }
+            else {
+                $url = $null
             }
         }
 
-        # ---------------------------------------------
-        # Rebuild a clean normalized object
-        # ---------------------------------------------
-        # This guarantees the exact same output shape
-        # as the Live function.
-        # ---------------------------------------------
-        $cleanDevice = [PSCustomObject]@{
-            SERIAL_NUMBER      = $device.SERIAL_NUMBER
-            DEVICE             = $device.DEVICE
-            USER               = $device.USER
-            COMPLIANCE         = $device.COMPLIANCE
-            OS                 = $device.OS
-            OS_VERSION         = $device.OS_VERSION
-            ENROLLED_DATE      = $device.ENROLLED_DATE
-            INTUNE_DEVICE_ID   = $device.INTUNE_DEVICE_ID
-            AZURE_AD_DEVICE_ID = $device.AZURE_AD_DEVICE_ID
-            OWNERSHIP_INTUNE   = $device.OWNERSHIP_INTUNE
-        }
+        Write-Host "[OK] Live Intune devices collected: $($allDevices.Count)" -ForegroundColor Green
+    }
 
-        $cleanDevices += $cleanDevice
+    # =====================================================
+    # NORMALIZATION
+    # =====================================================
+    $cleanExport = $allDevices | Select-Object $props
 
-        if ($cleanDevice.AZURE_AD_DEVICE_ID) {
-            $intuneByDeviceId[$cleanDevice.AZURE_AD_DEVICE_ID] = $cleanDevice
+    Write-Host "[OK] Intune normalization completed" -ForegroundColor Green
+
+    # =====================================================
+    # LOOKUP TABLE
+    # =====================================================
+    $intuneByDeviceId = @{}
+
+    foreach ($row in $cleanExport) {
+        if ($row.AZURE_AD_DEVICE_ID) {
+            $intuneByDeviceId[$row.AZURE_AD_DEVICE_ID] = $row
         }
     }
 
-    Write-Host "[OK] Intune sample devices loaded: $($cleanDevices.Count)" -ForegroundColor Green
+    Write-Host "[OK] Intune lookup table prepared" -ForegroundColor Green
 
-    # -------------------------------------------------
-    # Optional consistency check with Entra sample data
-    # -------------------------------------------------
-    # This does not block execution.
-    # It only gives visibility into how many Intune sample
-    # records can be correlated with Entra sample devices.
-    # -------------------------------------------------
-    $matchedWithEntra = 0
+    # =====================================================
+    # ENTRA ENRICHMENT
+    # =====================================================
+    foreach ($row in $cleanExport) {
+        Add-Member -InputObject $row -NotePropertyName "ENTRA_TRUST_TYPE" -NotePropertyValue $null -Force
 
-    foreach ($device in $cleanDevices) {
         if (
-            $device.AZURE_AD_DEVICE_ID -and
-            $EntraByDeviceId.ContainsKey($device.AZURE_AD_DEVICE_ID)
+            $row.AZURE_AD_DEVICE_ID -and
+            $EntraByDeviceId -and
+            $EntraByDeviceId.ContainsKey($row.AZURE_AD_DEVICE_ID)
         ) {
-            $matchedWithEntra++
+            $row.ENTRA_TRUST_TYPE = $EntraByDeviceId[$row.AZURE_AD_DEVICE_ID].trustType
         }
     }
 
-    Write-Host "[INFO] Intune sample devices matched to Entra sample devices: $matchedWithEntra / $($cleanDevices.Count)" -ForegroundColor White
+    Write-Host "[OK] Intune enrichment completed" -ForegroundColor Green
 
+    # =====================================================
+    # RETURN STRUCTURED DATA
+    # =====================================================
     return [PSCustomObject]@{
-        CleanDevices = $cleanDevices
+        AllDevices   = $allDevices
+        CleanDevices = $cleanExport
         ByDeviceId   = $intuneByDeviceId
     }
 }
