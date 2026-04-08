@@ -1,256 +1,161 @@
 # =====================================================
-# ENTRA DEVICE COLLECTION
+# ENTRA DEVICE COLLECTION - PUBLIC DEMO VERSION
 # =====================================================
 # Purpose:
-# Collect Entra ID devices from Microsoft Graph in Live mode
-# or load a fake sample dataset in Demo mode.
+# Retrieve Entra device inventory either from:
+# - Microsoft Graph (live mode)
+# - local sample JSON file (demo mode)
 #
-# Exposed functions:
-# - Get-EntraDevices
-# - Get-EntraDevicesFromSample
-#
-# Output structure:
-# Both functions return the same object format:
-# @{
-#     AllDevices    = <array>
-#     ByDeviceId    = <hashtable>
-#     ByDisplayName = <hashtable>
-# }
+# Output:
+# - full device list
+# - Workplace filtered list
+# - lookup tables by deviceId and displayName
 # =====================================================
+
+function Get-AllEntraDevices {
+    param (
+        [Parameter(Mandatory)]
+        [hashtable]$Headers
+    )
+
+    $currentUrl = "https://graph.microsoft.com/v1.0/devices?`$select=deviceId,displayName,trustType,operatingSystem,operatingSystemVersion,approximateLastSignInDateTime,accountEnabled"
+    $allItems = @()
+
+    while ($currentUrl) {
+        $response = Invoke-RestMethod -Method GET -Uri $currentUrl -Headers $Headers
+
+        if ($response.value) {
+            $allItems += $response.value
+        }
+
+        if ($response.PSObject.Properties.Name -contains '@odata.nextLink') {
+            $currentUrl = $response.'@odata.nextLink'
+        }
+        elseif ($response.PSObject.Properties.Name -contains 'nextLink') {
+            $currentUrl = $response.nextLink
+        }
+        else {
+            $currentUrl = $null
+        }
+    }
+
+    return $allItems
+}
 
 function Get-EntraDevices {
     param (
-        [Parameter(Mandatory)]
         [hashtable]$Headers,
-
-        [Parameter(Mandatory)]
         [string]$RawDataPath,
-
-        [Parameter(Mandatory)]
-        [string]$ProcessedDataPath
+        [string]$ProcessedDataPath,
+        [switch]$DemoMode,
+        [string]$SampleEntraFile
     )
 
     Write-Host "[STEP] Collecting Entra devices" -ForegroundColor Cyan
 
-    # -------------------------------------------------
-    # Ensure output folders exist
-    # -------------------------------------------------
-    foreach ($folder in @($RawDataPath, $ProcessedDataPath)) {
-        if (-not (Test-Path $folder)) {
-            New-Item -Path $folder -ItemType Directory -Force | Out-Null
-        }
-    }
-
-    # -------------------------------------------------
-    # Microsoft Graph endpoint
-    # -------------------------------------------------
-    # We request only the fields needed by the project.
-    # This keeps the dataset smaller and easier to process.
-    # -------------------------------------------------
-    $baseUrl = "https://graph.microsoft.com/v1.0/devices"
-    $selectFields = @(
-        "id",
-        "deviceId",
-        "displayName",
-        "trustType",
-        "operatingSystem",
-        "operatingSystemVersion",
-        "approximateLastSignInDateTime",
-        "accountEnabled"
-    ) -join ","
-
-    $currentUrl = "$baseUrl?`$select=$selectFields"
-    $allDevices = @()
-    $pageCount = 0
-
-    try {
-        while ($currentUrl) {
-            $pageCount++
-
-            $response = Invoke-RestMethod `
-                -Method GET `
-                -Uri $currentUrl `
-                -Headers $Headers `
-                -ErrorAction Stop
-
-            if ($response.value) {
-                $allDevices += $response.value
-            }
-
-            $nextLink = $null
-
-            if ($response.PSObject.Properties.Name -contains "@odata.nextLink") {
-                $nextLink = $response.'@odata.nextLink'
-            }
-            elseif ($response.PSObject.Properties.Name -contains "nextLink") {
-                $nextLink = $response.nextLink
-            }
-
-            if ($pageCount % 5 -eq 0) {
-                Write-Host "[INFO] Entra pages processed: $pageCount | Total devices so far: $($allDevices.Count)" -ForegroundColor White
-            }
-
-            $currentUrl = $nextLink
-        }
-    }
-    catch {
-        throw "Microsoft Graph Entra device collection failed: $($_.Exception.Message)"
-    }
-
-    if (-not $allDevices -or $allDevices.Count -eq 0) {
-        throw "No Entra devices were collected from Microsoft Graph."
-    }
-
-    Write-Host "[OK] Entra devices collected: $($allDevices.Count)" -ForegroundColor Green
-
-    # -------------------------------------------------
-    # Build lookup tables
-    # -------------------------------------------------
-    # ByDeviceId:
-    #   Used to match Intune azureADDeviceId <-> Entra deviceId
-    #
-    # ByDisplayName:
-    #   Used to match Trend endpointName <-> Entra displayName
-    # -------------------------------------------------
-    $entraByDeviceId = @{}
-    $entraByDisplayName = @{}
-
-    foreach ($device in $allDevices) {
-        if ($device.deviceId) {
-            $entraByDeviceId[$device.deviceId] = $device
-        }
-
-        # Keep the first occurrence if duplicate names exist.
-        # Duplicate names are possible in real environments.
-        if ($device.displayName -and -not $entraByDisplayName.ContainsKey($device.displayName)) {
-            $entraByDisplayName[$device.displayName] = $device
-        }
-    }
-
-    # -------------------------------------------------
-    # Export raw full dataset
-    # -------------------------------------------------
+    $entraAll = @()
     $date = Get-Date -Format "yyyyMMdd-HHmm"
 
-    $rawExportPath = Join-Path $RawDataPath "raw_entra_full_devices_$date.json"
-    $allDevices | ConvertTo-Json -Depth 10 | Out-File -FilePath $rawExportPath -Encoding UTF8
+    # =====================================================
+    # DEMO MODE - LOAD LOCAL SAMPLE FILE
+    # =====================================================
+    if ($DemoMode) {
+        Write-Host "[INFO] Demo mode active - loading sample Entra dataset" -ForegroundColor White
 
-    # -------------------------------------------------
-    # Export processed subset:
-    # Workplace devices only
-    # -------------------------------------------------
-    # These are often useful in BYOD-related investigations.
-    # -------------------------------------------------
-    $workplaceDevices = $allDevices | Where-Object { $_.trustType -eq "Workplace" }
-
-    $processedExportPath = Join-Path $ProcessedDataPath "entra_registered_devices_$date.json"
-    $workplaceDevices | ConvertTo-Json -Depth 10 | Out-File -FilePath $processedExportPath -Encoding UTF8
-
-    Write-Host "[OK] Entra raw export saved: $rawExportPath" -ForegroundColor Green
-    Write-Host "[OK] Entra processed Workplace export saved: $processedExportPath" -ForegroundColor Green
-
-    return [PSCustomObject]@{
-        AllDevices    = $allDevices
-        ByDeviceId    = $entraByDeviceId
-        ByDisplayName = $entraByDisplayName
-    }
-}
-
-function Get-EntraDevicesFromSample {
-    param (
-        [Parameter(Mandatory)]
-        [string]$SamplePath
-    )
-
-    Write-Host "[STEP] Loading Entra sample devices" -ForegroundColor Cyan
-
-    if (-not (Test-Path $SamplePath)) {
-        throw "Entra sample file not found: $SamplePath"
-    }
-
-    try {
-        $rawContent = Get-Content -Path $SamplePath -Raw -ErrorAction Stop
-        $sampleData = $rawContent | ConvertFrom-Json -ErrorAction Stop
-    }
-    catch {
-        throw "Failed to read Entra sample file: $($_.Exception.Message)"
-    }
-
-    # -------------------------------------------------
-    # Normalize the input
-    # -------------------------------------------------
-    # The sample file may contain either:
-    # - a pure array of devices
-    # - an object with a property such as 'items', 'value', or 'records'
-    # -------------------------------------------------
-    $allDevices = @()
-
-    if ($sampleData -is [System.Collections.IEnumerable] -and $sampleData -isnot [string]) {
-        # If the root JSON element is already an array
-        if ($sampleData.PSObject.TypeNames -notcontains 'System.Management.Automation.PSCustomObject') {
-            $allDevices = @($sampleData)
+        if (-not $SampleEntraFile) {
+            throw "Demo mode is enabled, but no SampleEntraFile path was provided."
         }
-    }
 
-    if (-not $allDevices -or $allDevices.Count -eq 0) {
-        if ($sampleData.PSObject.Properties.Name -contains "value") {
-            $allDevices = @($sampleData.value)
+        if (-not (Test-Path $SampleEntraFile)) {
+            throw "Sample Entra file not found: $SampleEntraFile"
         }
-        elseif ($sampleData.PSObject.Properties.Name -contains "items") {
-            $allDevices = @($sampleData.items)
+
+        $sampleContent = Get-Content -Path $SampleEntraFile -Raw | ConvertFrom-Json
+
+        if ($sampleContent.devices) {
+            $entraAll = @($sampleContent.devices)
         }
-        elseif ($sampleData.PSObject.Properties.Name -contains "records") {
-            $allDevices = @($sampleData.records)
+        elseif ($sampleContent.value) {
+            $entraAll = @($sampleContent.value)
+        }
+        elseif ($sampleContent -is [System.Collections.IEnumerable]) {
+            $entraAll = @($sampleContent)
         }
         else {
-            $allDevices = @($sampleData)
+            throw "Sample Entra file format is not recognized. Expected an array, a 'devices' property, or a 'value' property."
         }
+
+        Write-Host "[OK] Sample Entra devices loaded: $($entraAll.Count)" -ForegroundColor Green
     }
 
-    if (-not $allDevices -or $allDevices.Count -eq 0) {
-        throw "Entra sample dataset is empty."
+    # =====================================================
+    # LIVE MODE - MICROSOFT GRAPH
+    # =====================================================
+    else {
+        if (-not $Headers) {
+            throw "Live Entra collection requires Graph headers."
+        }
+
+        $entraAll = Get-AllEntraDevices -Headers $Headers
+        Write-Host "[OK] Live Entra devices collected: $($entraAll.Count)" -ForegroundColor Green
     }
 
-    # -------------------------------------------------
-    # Build lookup tables
-    # -------------------------------------------------
+    # =====================================================
+    # EXPORT RAW SNAPSHOT
+    # =====================================================
+    $rawFullPath = Join-Path $RawDataPath "raw_entra_full_devices_$date.json"
+
+    $fullExport = [PSCustomObject]@{
+        collectedAt  = (Get-Date).ToString("o")
+        source       = if ($DemoMode) { "sample_file" } else { "microsoft_graph" }
+        totalDevices = $entraAll.Count
+        devices      = $entraAll
+    }
+
+    $fullExport | ConvertTo-Json -Depth 10 | Out-File -FilePath $rawFullPath -Encoding UTF8
+
+    # =====================================================
+    # FILTER WORKPLACE DEVICES
+    # =====================================================
+    $entraRegistered = $entraAll | Where-Object { $_.trustType -eq "Workplace" }
+
+    $registeredPath = Join-Path $ProcessedDataPath "entra_registered_devices_$date.json"
+
+    $registeredExport = [PSCustomObject]@{
+        collectedAt     = (Get-Date).ToString("o")
+        source          = if ($DemoMode) { "sample_file" } else { "microsoft_graph" }
+        trustTypeFilter = "Workplace"
+        totalDevices    = $entraRegistered.Count
+        devices         = $entraRegistered
+    }
+
+    $registeredExport | ConvertTo-Json -Depth 10 | Out-File -FilePath $registeredPath -Encoding UTF8
+
+    # =====================================================
+    # LOOKUP TABLES
+    # =====================================================
     $entraByDeviceId = @{}
     $entraByDisplayName = @{}
 
-    foreach ($device in $allDevices) {
-
-        # Defensive normalization:
-        # Ensure the most important properties exist even in fake data.
-        if (-not ($device.PSObject.Properties.Name -contains "deviceId")) {
-            $device | Add-Member -NotePropertyName deviceId -NotePropertyValue $null -Force
-        }
-
-        if (-not ($device.PSObject.Properties.Name -contains "displayName")) {
-            $device | Add-Member -NotePropertyName displayName -NotePropertyValue $null -Force
-        }
-
-        if (-not ($device.PSObject.Properties.Name -contains "trustType")) {
-            $device | Add-Member -NotePropertyName trustType -NotePropertyValue $null -Force
-        }
-
-        if (-not ($device.PSObject.Properties.Name -contains "approximateLastSignInDateTime")) {
-            $device | Add-Member -NotePropertyName approximateLastSignInDateTime -NotePropertyValue $null -Force
-        }
-
+    foreach ($device in $entraAll) {
         if ($device.deviceId) {
             $entraByDeviceId[$device.deviceId] = $device
         }
 
-        if ($device.displayName -and -not $entraByDisplayName.ContainsKey($device.displayName)) {
+        if ($device.displayName) {
             $entraByDisplayName[$device.displayName] = $device
         }
     }
 
-    Write-Host "[OK] Entra sample devices loaded: $($allDevices.Count)" -ForegroundColor Green
+    Write-Host "[OK] Entra lookup tables prepared" -ForegroundColor Green
 
+    # =====================================================
+    # RETURN STRUCTURED DATA
+    # =====================================================
     return [PSCustomObject]@{
-        AllDevices    = $allDevices
-        ByDeviceId    = $entraByDeviceId
-        ByDisplayName = $entraByDisplayName
+        AllDevices        = $entraAll
+        RegisteredDevices = $entraRegistered
+        ByDeviceId        = $entraByDeviceId
+        ByDisplayName     = $entraByDisplayName
     }
 }
