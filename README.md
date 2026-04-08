@@ -1,41 +1,129 @@
-⚠️ **Work in Progress**
+# Device Security Posture Monitor for Microsoft 365
 
-This project is currently under active development.  
-Features, structure and documentation may evolve as the project progresses
+PowerShell prototype designed to correlate device visibility across multiple security and management sources in a Microsoft 365 environment.
 
+This public version is a **sanitized demo edition** built for portfolio and technical presentation purposes.  
+It runs with **fake / sample data only** and does **not** include any production credentials, internal infrastructure details, or sensitive organizational information.
 
-# BYOD-Security-Posture-Monitor-for-Microsoft-365 (in Process)
+---
 
-Prototype tool to correlate device inventories across:
+## Project Purpose
 
-- Microsoft Intune
-- Entra ID (Azure AD)
+The goal of this project is to build a **consolidated device view** by combining signals from:
+
 - Trend Vision One
+- Microsoft Entra ID
+- Microsoft Intune
 
-The goal is to identify security posture issues for BYOD devices
-and provide actionable information for helpdesk teams.
+The objective is to help identify:
+
+- devices visible in one source but missing in another
+- unmanaged or partially managed devices
+- noncompliant devices
+- probable personal devices (BYOD-like behavior)
+- inactive devices
+- visibility gaps across security sources
+
+This project is designed with an operational mindset:  
+not just collecting data, but turning it into **actionable outputs** for security or helpdesk teams.
+
+---
+
+## Public Demo Scope
+
+This repository is a **public demonstration version** of the project.
+
+It is intended to show:
+
+- project architecture
+- PowerShell scripting structure
+- multi-source collection logic
+- correlation logic
+- risk classification
+- reporting design
+
+This version uses:
+
+- **sample / fake datasets**
+- **sanitized configuration**
+- **non-production paths and placeholders**
+
+It does **not** expose:
+
+- real tenant information
+- real credentials
+- internal SMTP configuration
+- private infrastructure details
+- organizational data
+
+---
 
 ## Current Features
 
-- Microsoft Graph authentication (app-only)
-- Intune device inventory collection
+- Modular PowerShell architecture
+- Microsoft Graph authentication structure
 - Entra ID device inventory collection
-- Data normalization and CSV export
+- Intune managed device inventory collection
+- Trend Vision One endpoint loading / collection flow
+- Cross-source device correlation
+- Consolidated device object generation
+- Risk engine with issue tagging
+- Helpdesk-oriented CSV / JSON reporting
+- Full JSON export for dashboard / UI usage
+- Detection of:
+  - unmatched devices
+  - partial matches
+  - noncompliant devices
+  - probable personal devices
+  - inactive devices
+  - source visibility gaps
+  - duplicate hostnames
 
-## Planned Features
+---
 
-- Correlation Intune ↔ Entra
-- Correlation Intune/Entra ↔ Trend Vision One
-- Risk scoring
-- Security posture report
+## Detection Logic Overview
 
-## Requirements
+The monitoring logic currently focuses on practical cases such as:
 
-- PowerShell 7+
-- Microsoft Graph API access
-- Environment variables:
+- **Trend only** device  
+  Device seen in endpoint security but not found in Entra ID
 
-GRAPH_TENANT_ID  
-GRAPH_CLIENT_ID  
-GRAPH_SECRET  
-TREND_API_KEY
+- **Trend + Entra, but not Intune**  
+  Device exists in identity but is not managed
+
+- **Noncompliant Intune device**  
+  Device is managed but not compliant
+
+- **Workplace / personal device registration**  
+  Device appears as Entra `Workplace`
+
+- **Probable personal device not registered in Entra**  
+  Device looks like a personal endpoint based on multiple signals
+
+- **Inactive device**  
+  No recent activity observed across available sources
+
+- **Source visibility gap**  
+  Device is not consistently visible across security and management layers
+
+---
+
+## Project Structure
+
+Device-Security-Posture-Monitor/
+│
+├── src/
+│   ├── config/
+│   ├── core/
+│   ├── processing/
+│   ├── output/
+│   ├── tools/
+│   └── Main.ps1
+│
+├── data/
+│   ├── raw/
+│   ├── processed/
+│   ├── reports/
+│   └── sample/
+│
+└── README.md
