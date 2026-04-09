@@ -1,87 +1,71 @@
-{
-
-  "endpoints": [
-
-    {
-
-      "endpointName": "LAPTOP-001",
-
-      "agentVersion": "7.0.1",
-
-      "osName": "Windows 10",
-
-      "ipAddress": "192.168.1.10",
-
-      "lastSeen": "2026-03-03T10:00:00Z",
-
-      "healthStatus": "normal"
-
-    },
-
-    {
-
-      "endpointName": "LAPTOP-002",
-
-      "agentVersion": "7.0.1",
-
-      "osName": "Windows 11",
-
-      "ipAddress": "192.168.1.11",
-
-      "lastSeen": "2026-03-03T10:05:00Z",
-
-      "healthStatus": "warning"
-
-    },
-
-    {
-
-      "endpointName": "DESKTOP-003",
-
-      "agentVersion": "7.0.0",
-
-      "osName": "Windows 10",
-
-      "ipAddress": "192.168.1.12",
-
-      "lastSeen": "2026-03-03T09:45:00Z",
-
-      "healthStatus": "normal"
-
-    },
-
-    {
-
-      "endpointName": "BYOD-LAPTOP-004",
-
-      "agentVersion": "6.9.5",
-
-      "osName": "Windows 11",
-
-      "ipAddress": "192.168.1.13",
-
-      "lastSeen": "2026-03-02T18:00:00Z",
-
-      "healthStatus": "normal"
-
-    },
-
-    {
-
-      "endpointName": "UNKNOWN-DEVICE",
-
-      "agentVersion": "7.0.1",
-
-      "osName": "Windows 10",
-
-      "ipAddress": "192.168.1.14",
-
-      "lastSeen": "2026-03-01T12:00:00Z",
-
-      "healthStatus": "normal"
-
-    }
-
-  ]
-
-}
+[
+  {
+    "endpointName": "LAP-TOMMY-01",
+    "displayName": "LAP-TOMMY-01",
+    "type": "laptop",
+    "agentGuid": "trend-agent-001",
+    "osName": "Windows",
+    "osVersion": "11.0.22631",
+    "osArchitecture": "64-bit",
+    "osPlatform": "Windows",
+    "cpuArchitecture": "x64",
+    "lastSeen": "2026-04-09T07:20:00Z",
+    "lastUsedIp": "192.168.1.10",
+    "ipAddresses": ["192.168.1.10"],
+    "serialNumber": "SN-001",
+    "isolationStatus": "none",
+    "serviceGatewayOrProxy": "direct",
+    "versionControlPolicy": "default",
+    "agentUpdateStatus": "up_to_date",
+    "agentUpdatePolicy": "automatic",
+    "securityPolicy": "standard",
+    "securityPolicyOverriddenStatus": "false",
+    "lastLoggedOnUser": "tommy.demo@contoso.com"
+  },
+  {
+    "endpointName": "LAP-ANNA-01",
+    "displayName": "LAP-ANNA-01",
+    "type": "laptop",
+    "agentGuid": "trend-agent-002",
+    "osName": "Windows",
+    "osVersion": "10.0.19045",
+    "osArchitecture": "64-bit",
+    "osPlatform": "Windows",
+    "cpuArchitecture": "x64",
+    "lastSeen": "2026-04-08T10:00:00Z",
+    "lastUsedIp": "192.168.1.11",
+    "ipAddresses": ["192.168.1.11"],
+    "serialNumber": "SN-002",
+    "isolationStatus": "none",
+    "serviceGatewayOrProxy": "direct",
+    "versionControlPolicy": "default",
+    "agentUpdateStatus": "outdated",
+    "agentUpdatePolicy": "automatic",
+    "securityPolicy": "standard",
+    "securityPolicyOverriddenStatus": "false",
+    "lastLoggedOnUser": "anna.demo@contoso.com"
+  },
+  {
+    "endpointName": "PRIVATE-LAPTOP-01",
+    "displayName": "PRIVATE-LAPTOP-01",
+    "type": "laptop",
+    "agentGuid": "trend-agent-003",
+    "osName": "Windows",
+    "osVersion": "11.0.22621",
+    "osArchitecture": "64-bit",
+    "osPlatform": "Windows",
+    "cpuArchitecture": "x64",
+    "lastSeen": "2026-04-09T06:50:00Z",
+    "lastUsedIp": "192.168.1.50",
+    "ipAddresses": ["192.168.1.50"],
+    "serialNumber": "SN-099",
+    "isolationStatus": "none",
+    "serviceGatewayOrProxy": "direct",
+    "versionControlPolicy": "default",
+    "agentUpdateStatus": "up_to_date",
+    "agentUpdatePolicy": "automatic",
+    "securityPolicy": "standard",
+    "securityPolicyOverriddenStatus": "false",
+    "lastLoggedOnUser": "private.user@contoso.com"
+  }
+]

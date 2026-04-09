@@ -1,0 +1,15 @@
+﻿{
+    "generated_at":  "20260409-1506",
+    "total_devices":  0,
+    "summary":  {
+                    "total_devices":  0,
+                    "managed_in_intune":  0,
+                    "not_managed_in_intune":  0,
+                    "noncompliant_devices":  0,
+                    "workplace_devices":  0,
+                    "inactive_devices_30d_plus":  0
+                },
+    "records":  {
+
+                }
+}
