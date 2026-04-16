@@ -1,166 +1,141 @@
 # =====================================================
-# DEFENDER DEVICE COLLECTION - PUBLIC VERSION
-# =====================================================
-# Purpose:
-# Collect Microsoft Defender for Endpoint devices
-# and prepare a lookup map for correlation.
-#
-# Status:
-# - OPTIONAL module
-# - not required for demo mode
-# - can be enabled later without refactoring
-#
-# API:
-# https://api.security.microsoft.com/api/machines
+# MAIN - SECURITY DEVICE MONITOR (PUBLIC DEMO)
 # =====================================================
 
-# =====================================================
-# AUTHENTICATION
-# =====================================================
+# ---------------------------
+# LOAD CONFIG
+# ---------------------------
 
-function Get-DefenderAccessToken {
-    param (
-        [Parameter(Mandatory)] [string]$TenantId,
-        [Parameter(Mandatory)] [string]$ClientId,
-        [Parameter(Mandatory)] [string]$ClientSecret
-    )
+. "$PSScriptRoot\config\Config.ps1"
 
-    try {
-        Write-Host "[STEP] Authenticating to Defender API" -ForegroundColor Cyan
+Write-Log "Starting Security Device Monitor..."
 
-        $tokenUri = "https://login.microsoftonline.com/$TenantId/oauth2/v2.0/token"
+# ---------------------------
+# LOAD MODULES
+# ---------------------------
 
-        $body = @{
-            client_id     = $ClientId
-            scope         = "https://api.security.microsoft.com/.default"
-            client_secret = $ClientSecret
-            grant_type    = "client_credentials"
-        }
+. "$PSScriptRoot\core\EntraCollect.ps1"
+. "$PSScriptRoot\core\IntuneCollect.ps1"
+. "$PSScriptRoot\core\TrendCollect.ps1"
+. "$PSScriptRoot\core\DefenderCollect.ps1"
 
-        $token = Invoke-RestMethod `
-            -Method POST `
-            -Uri $tokenUri `
-            -Body $body `
-            -ContentType "application/x-www-form-urlencoded"
+. "$PSScriptRoot\processing\Correlation.ps1"
+. "$PSScriptRoot\processing\RiskEngine.ps1"
 
-        if (-not $token.access_token) {
-            throw "Defender token is empty"
-        }
+. "$PSScriptRoot\output\Reports.ps1"
+. "$PSScriptRoot\output\Mail.ps1"
 
-        Write-Host "[OK] Defender authentication successful" -ForegroundColor Green
+# ---------------------------
+# STEP 1 - LOAD DATA
+# ---------------------------
 
-        return $token.access_token
-    }
-    catch {
-        Write-Host "[ERROR] Defender authentication failed" -ForegroundColor Red
-        Write-Host $_.Exception.Message -ForegroundColor Red
-        throw
-    }
+Write-Log "Loading data sources..."
+
+if ($DemoMode -and $EnableDemoData) {
+
+    Write-Log "Using DEMO data"
+
+    $EntraDevices  = Get-Content $SampleEntraDevicesFile  | ConvertFrom-Json
+    $IntuneDevices = Get-Content $SampleIntuneDevicesFile | ConvertFrom-Json
+    $TrendDevices  = Get-Content $SampleTrendDevicesFile  | ConvertFrom-Json
+
+} else {
+
+    Write-Log "Live collection not enabled in public version" "WARN"
+    $EntraDevices  = @()
+    $IntuneDevices = @()
+    $TrendDevices  = @()
 }
 
-# =====================================================
-# DEVICE COLLECTION
-# =====================================================
+# ---------------------------
+# STEP 2 - LOAD DEFENDER
+# ---------------------------
 
-function Get-DefenderDevices {
-    param (
-        [Parameter(Mandatory)] [string]$AccessToken
-    )
+Write-Log "Loading Defender data..."
 
-    Write-Host "[STEP] Collecting Defender devices" -ForegroundColor Cyan
+if ($EnableDefenderDemo) {
 
-    $headers = @{
-        Authorization = "Bearer $AccessToken"
-        "Content-Type" = "application/json"
-    }
+    $DefenderData = Get-DefenderDemoData `
+        -AlertsFile     $SampleDefenderAlertsFile `
+        -MachinesFile   $SampleDefenderMachinesFile `
+        -HuntingFile    $SampleDefenderHuntingFile `
+        -MissingKbsFile $SampleDefenderMissingKbsFile
 
-    $uri = "https://api.security.microsoft.com/api/machines"
-    $devices = @()
+} else {
 
-    try {
-        do {
-            $response = Invoke-RestMethod `
-                -Method GET `
-                -Uri $uri `
-                -Headers $headers
-
-            if ($response.value) {
-                $devices += $response.value
-                Write-Host "[INFO] Defender page collected: $($response.value.Count)" -ForegroundColor White
-            }
-
-            if ($response.PSObject.Properties.Name -contains '@odata.nextLink') {
-                $uri = $response.'@odata.nextLink'
-            }
-            else {
-                $uri = $null
-            }
-
-        } while ($uri)
-
-        Write-Host "[OK] Defender devices collected: $($devices.Count)" -ForegroundColor Green
-
-        return $devices
-    }
-    catch {
-        Write-Host "[ERROR] Defender device collection failed" -ForegroundColor Red
-        Write-Host $_.Exception.Message -ForegroundColor Red
-        throw
-    }
+    Write-Log "Defender disabled" "WARN"
+    $DefenderData = $null
 }
 
-# =====================================================
-# DEVICE MAP (AadDeviceId → Defender device)
-# =====================================================
+# ---------------------------
+# STEP 3 - CORRELATION
+# ---------------------------
 
-function New-DefenderDeviceMap {
-    param (
-        [Parameter(Mandatory)] [array]$DefenderDevices
-    )
+Write-Log "Running correlation engine..."
 
-    $map = @{}
+$CorrelatedDevices = Invoke-Correlation `
+    -EntraDevices  $EntraDevices `
+    -IntuneDevices $IntuneDevices `
+    -TrendDevices  $TrendDevices `
+    -DefenderData  $DefenderData
 
-    foreach ($device in $DefenderDevices) {
+# ---------------------------
+# STEP 4 - RISK ENGINE
+# ---------------------------
 
-        if (-not $device.aadDeviceId) {
-            continue
-        }
+Write-Log "Running risk engine..."
 
-        if (-not $map.ContainsKey($device.aadDeviceId)) {
-            $map[$device.aadDeviceId] = $device
-        }
+$RiskDevices = Invoke-RiskEngine -Devices $CorrelatedDevices
+
+# ---------------------------
+# STEP 5 - REPORTS
+# ---------------------------
+
+Write-Log "Generating reports..."
+
+$Reports = Export-Reports `
+    -Devices $RiskDevices `
+    -FullReportFile $FullReportFile `
+    -FullReportStable $FullReportStable `
+    -SummaryReportFile $SummaryReportFile `
+    -SummaryReportStable $SummaryReportStable `
+    -ReportName $ReportName
+
+# ---------------------------
+# STEP 6 - FRONTEND EXPORT
+# ---------------------------
+
+if ($EnableFrontendExport) {
+
+    Write-Log "Exporting frontend data..."
+
+    if (-not (Test-Path $FrontendDataPath)) {
+        New-Item -ItemType Directory -Path $FrontendDataPath | Out-Null
     }
 
-    Write-Host "[OK] Defender device map created: $($map.Count)" -ForegroundColor Green
+    $Reports.Full | ConvertTo-Json -Depth 10 | Out-File $FrontendFullReport -Encoding UTF8
+    $Reports.Summary | ConvertTo-Json -Depth 10 | Out-File $FrontendSummary -Encoding UTF8
 
-    return $map
+    Write-Log "Frontend data exported"
 }
 
-# =====================================================
-# OPTIONAL NORMALIZATION (FUTURE USE)
-# =====================================================
-# This block is not used yet but ready for future integration
-# into correlation / risk engine.
-# =====================================================
+# ---------------------------
+# STEP 7 - MAIL (DISABLED BY DEFAULT)
+# ---------------------------
 
-function Get-DefenderDeviceSummary {
-    param (
-        [Parameter(Mandatory)] $Device
-    )
+if ($EnableMail) {
 
-    return [PSCustomObject]@{
-        defender_device_id         = $Device.id
-        defender_aad_device_id     = $Device.aadDeviceId
-        defender_dns_name          = $Device.computerDnsName
-        defender_os_platform       = $Device.osPlatform
+    Write-Log "Sending report by mail..."
 
-        defender_risk_score        = $Device.riskScore
-        defender_exposure_level    = $Device.exposureLevel
-
-        defender_onboarding_status = $Device.onboardingStatus
-        defender_health_status     = $Device.healthStatus
-
-        defender_last_seen         = $Device.lastSeen
-        defender_first_seen        = $Device.firstSeen
-    }
+    Send-ReportMail `
+        -Summary $Reports.Summary `
+        -FullReportPath $FullReportStable
 }
+
+# ---------------------------
+# FINAL LOG
+# ---------------------------
+
+Write-Log "Execution completed successfully"
+Write-Log "Full report: $FullReportStable"
+Write-Log "Summary report: $SummaryReportStable"
