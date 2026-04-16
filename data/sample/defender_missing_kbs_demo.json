@@ -1,0 +1,16 @@
+[
+  {
+    "deviceName": "BYOD-JOHN",
+    "kbId": "KB5021234",
+    "kbName": "Critical Security Update",
+    "severity": "Critical",
+    "product": "Windows 10"
+  },
+  {
+    "deviceName": "BYOD-JOHN",
+    "kbId": "KB5025678",
+    "kbName": "Cumulative Update",
+    "severity": "High",
+    "product": "Windows 10"
+  }
+]
