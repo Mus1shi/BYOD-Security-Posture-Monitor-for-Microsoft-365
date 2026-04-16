@@ -2,7 +2,7 @@
 # CORRELATION ENGINE - SECURITY DEVICE MONITOR (PUBLIC DEMO)
 # =====================================================
 
-function Normalize-CorrelationString {
+function Normalize-CorrelationKey {
     param (
         [AllowNull()]
         [string]$Value
@@ -12,22 +12,25 @@ function Normalize-CorrelationString {
         return $null
     }
 
-    return $Value.Trim().ToLower()
+    return $Value.Trim().ToLowerInvariant()
 }
 
-function Get-CorrelationDeviceName {
+function Get-DeviceNameFromRecord {
     param (
-        [Parameter(Mandatory)]
-        $Item
+        $Record
     )
 
+    if ($null -eq $Record) {
+        return $null
+    }
+
     $candidates = @(
-        $Item.device_name,
-        $Item.deviceName,
-        $Item.displayName,
-        $Item.computerDnsName,
-        $Item.hostname,
-        $Item.DeviceName
+        $Record.device_name,
+        $Record.deviceName,
+        $Record.displayName,
+        $Record.computerDnsName,
+        $Record.hostname,
+        $Record.DeviceName
     )
 
     foreach ($candidate in $candidates) {
@@ -39,19 +42,23 @@ function Get-CorrelationDeviceName {
     return $null
 }
 
-function Get-CorrelationAadDeviceId {
+function Get-AadDeviceIdFromRecord {
     param (
-        [Parameter(Mandatory)]
-        $Item
+        $Record
     )
 
+    if ($null -eq $Record) {
+        return $null
+    }
+
     $candidates = @(
-        $Item.aad_device_id,
-        $Item.azureADDeviceId,
-        $Item.azureAdDeviceId,
-        $Item.deviceId,
-        $Item.device_id,
-        $Item.DeviceId
+        $Record.aad_device_id,
+        $Record.aadDeviceId,
+        $Record.azureADDeviceId,
+        $Record.azureAdDeviceId,
+        $Record.deviceId,
+        $Record.device_id,
+        $Record.DeviceId
     )
 
     foreach ($candidate in $candidates) {
@@ -63,19 +70,22 @@ function Get-CorrelationAadDeviceId {
     return $null
 }
 
-function Get-CorrelationPrimaryUser {
+function Get-PrimaryUserFromRecord {
     param (
-        [Parameter(Mandatory)]
-        $Item
+        $Record
     )
 
+    if ($null -eq $Record) {
+        return $null
+    }
+
     $candidates = @(
-        $Item.primary_user,
-        $Item.userPrincipalName,
-        $Item.user_principal_name,
-        $Item.owner,
-        $Item.lastLoggedOnUser,
-        $Item.email
+        $Record.primary_user,
+        $Record.userPrincipalName,
+        $Record.user_principal_name,
+        $Record.owner,
+        $Record.lastLoggedOnUser,
+        $Record.email
     )
 
     foreach ($candidate in $candidates) {
@@ -87,7 +97,35 @@ function Get-CorrelationPrimaryUser {
     return $null
 }
 
-function Add-CorrelationIndexItem {
+function Get-PropertyValue {
+    param (
+        $Record,
+        [Parameter(Mandatory)]
+        [string[]]$PropertyNames
+    )
+
+    if ($null -eq $Record) {
+        return $null
+    }
+
+    foreach ($propertyName in $PropertyNames) {
+        $property = $Record.PSObject.Properties[$propertyName]
+        if ($null -ne $property -and $null -ne $property.Value) {
+            if ($property.Value -is [string]) {
+                if (-not [string]::IsNullOrWhiteSpace($property.Value)) {
+                    return $property.Value.Trim()
+                }
+            }
+            else {
+                return $property.Value
+            }
+        }
+    }
+
+    return $null
+}
+
+function Add-ToLookupIndex {
     param (
         [Parameter(Mandatory)]
         [hashtable]$Index,
@@ -96,45 +134,45 @@ function Add-CorrelationIndexItem {
         [string]$Key,
 
         [Parameter(Mandatory)]
-        $Item
+        $Value
     )
 
     if ([string]::IsNullOrWhiteSpace($Key)) {
         return
     }
 
-    $normalizedKey = Normalize-CorrelationString -Value $Key
+    $normalizedKey = Normalize-CorrelationKey -Value $Key
 
     if (-not $Index.ContainsKey($normalizedKey)) {
-        $Index[$normalizedKey] = @()
+        $Index[$normalizedKey] = New-Object System.Collections.Generic.List[object]
     }
 
-    $Index[$normalizedKey] += $Item
+    [void]$Index[$normalizedKey].Add($Value)
 }
 
-function New-CorrelationIndex {
+function New-RecordIndex {
     param (
         [Parameter(Mandatory)]
-        [array]$Items
+        [array]$Records
     )
 
-    $index = @{
-        ByName = @{}
+    $index = [PSCustomObject]@{
+        ByName        = @{}
         ByAadDeviceId = @{}
     }
 
-    foreach ($item in $Items) {
-        $deviceName = Get-CorrelationDeviceName -Item $item
-        $aadDeviceId = Get-CorrelationAadDeviceId -Item $item
+    foreach ($record in $Records) {
+        $deviceName = Get-DeviceNameFromRecord -Record $record
+        $aadDeviceId = Get-AadDeviceIdFromRecord -Record $record
 
-        Add-CorrelationIndexItem -Index $index.ByName -Key $deviceName -Item $item
-        Add-CorrelationIndexItem -Index $index.ByAadDeviceId -Key $aadDeviceId -Item $item
+        Add-ToLookupIndex -Index $index.ByName -Key $deviceName -Value $record
+        Add-ToLookupIndex -Index $index.ByAadDeviceId -Key $aadDeviceId -Value $record
     }
 
     return $index
 }
 
-function Get-IndexedItems {
+function Get-IndexedRecords {
     param (
         [Parameter(Mandatory)]
         [hashtable]$Index,
@@ -147,7 +185,7 @@ function Get-IndexedItems {
         return @()
     }
 
-    $normalizedKey = Normalize-CorrelationString -Value $Key
+    $normalizedKey = Normalize-CorrelationKey -Value $Key
 
     if ($Index.ContainsKey($normalizedKey)) {
         return @($Index[$normalizedKey])
@@ -156,7 +194,7 @@ function Get-IndexedItems {
     return @()
 }
 
-function Get-FirstNonEmptyValue {
+function Get-FirstMeaningfulValue {
     param (
         [Parameter(Mandatory)]
         [object[]]$Values
@@ -167,20 +205,38 @@ function Get-FirstNonEmptyValue {
             continue
         }
 
-        if ($value -is [string]) {
-            if (-not [string]::IsNullOrWhiteSpace($value)) {
-                return $value.Trim()
+        if ($value -is [array]) {
+            foreach ($item in $value) {
+                if ($null -eq $item) {
+                    continue
+                }
+
+                if ($item -is [string]) {
+                    if (-not [string]::IsNullOrWhiteSpace($item)) {
+                        return $item.Trim()
+                    }
+                }
+                else {
+                    return $item
+                }
             }
         }
         else {
-            return $value
+            if ($value -is [string]) {
+                if (-not [string]::IsNullOrWhiteSpace($value)) {
+                    return $value.Trim()
+                }
+            }
+            else {
+                return $value
+            }
         }
     }
 
     return $null
 }
 
-function Get-UniqueStringList {
+function Get-UniqueStringValues {
     param (
         [Parameter(Mandatory)]
         [object[]]$Values
@@ -194,57 +250,14 @@ function Get-UniqueStringList {
             continue
         }
 
-        if ($value -is [System.Array]) {
-            foreach ($subValue in $value) {
-                if ([string]::IsNullOrWhiteSpace([string]$subValue)) {
-                    continue
-                }
-
-                $normalized = Normalize-CorrelationString -Value ([string]$subValue)
-                if (-not $seen.ContainsKey($normalized)) {
-                    $seen[$normalized] = $true
-                    $result.Add(([string]$subValue).Trim())
-                }
-            }
-        }
-        else {
-            if ([string]::IsNullOrWhiteSpace([string]$value)) {
-                continue
-            }
-
-            $normalized = Normalize-CorrelationString -Value ([string]$value)
-            if (-not $seen.ContainsKey($normalized)) {
-                $seen[$normalized] = $true
-                $result[$result.Count] = ([string]$value).Trim()
-            }
-        }
-    }
-
-    return @($result)
-}
-
-function Get-UniqueStringListSafe {
-    param (
-        [Parameter(Mandatory)]
-        [object[]]$Values
-    )
-
-    $result = New-Object System.Collections.Generic.List[string]
-    $seen = @{}
-
-    foreach ($value in $Values) {
-        if ($null -eq $value) {
-            continue
-        }
-
-        if ($value -is [System.Array]) {
+        if ($value -is [array]) {
             foreach ($subValue in $value) {
                 if ([string]::IsNullOrWhiteSpace([string]$subValue)) {
                     continue
                 }
 
                 $clean = ([string]$subValue).Trim()
-                $normalized = Normalize-CorrelationString -Value $clean
+                $normalized = Normalize-CorrelationKey -Value $clean
 
                 if (-not $seen.ContainsKey($normalized)) {
                     $seen[$normalized] = $true
@@ -258,7 +271,7 @@ function Get-UniqueStringListSafe {
             }
 
             $clean = ([string]$value).Trim()
-            $normalized = Normalize-CorrelationString -Value $clean
+            $normalized = Normalize-CorrelationKey -Value $clean
 
             if (-not $seen.ContainsKey($normalized)) {
                 $seen[$normalized] = $true
@@ -270,7 +283,7 @@ function Get-UniqueStringListSafe {
     return @($result)
 }
 
-function Test-AnyTrue {
+function Test-ContainsTrue {
     param (
         [Parameter(Mandatory)]
         [object[]]$Values
@@ -285,110 +298,20 @@ function Test-AnyTrue {
     return $false
 }
 
-function Resolve-MatchStatus {
-    param (
-        [bool]$HasTrend,
-        [bool]$HasEntra,
-        [bool]$HasIntune,
-        [bool]$HasDefender
-    )
-
-    $sourceCount = @($HasTrend, $HasEntra, $HasIntune, $HasDefender | Where-Object { $_ -eq $true }).Count
-
-    if ($sourceCount -ge 4) {
-        return "full_match_all_sources"
-    }
-
-    if ($sourceCount -eq 3) {
-        return "strong_match_three_sources"
-    }
-
-    if ($sourceCount -eq 2) {
-        return "partial_match_two_sources"
-    }
-
-    return "single_source_only"
-}
-
-function Get-DefenderItemsForDevice {
-    param (
-        [Parameter(Mandatory)]
-        $DefenderData,
-
-        [AllowNull()]
-        [string]$DeviceName,
-
-        [AllowNull()]
-        [string]$AadDeviceId
-    )
-
-    $results = @()
-
-    if ($null -eq $DefenderData) {
-        return @()
-    }
-
-    $results += Get-IndexedItems -Index $DefenderData.ByDeviceName -Key $DeviceName
-    $results += Get-IndexedItems -Index $DefenderData.ByAadDeviceId -Key $AadDeviceId
-
-    if (-not $results -or $results.Count -eq 0) {
-        return @()
-    }
-
-    $unique = @()
-    $seen = @{}
-
-    foreach ($item in $results) {
-        $fingerprint = "{0}|{1}|{2}|{3}" -f `
-            $item.source,
-            $item.device_name,
-            $item.aad_device_id,
-            ($item.alert_id ?? $item.machine_id ?? $item.kb_id ?? $item.device_id)
-
-        if (-not $seen.ContainsKey($fingerprint)) {
-            $seen[$fingerprint] = $true
-            $unique += $item
-        }
-    }
-
-    return $unique
-}
-
-function Group-DefenderSignals {
-    param (
-        [Parameter(Mandatory)]
-        [array]$DefenderItems
-    )
-
-    $alerts = @($DefenderItems | Where-Object { $_.source -eq "defender_alert" })
-    $machines = @($DefenderItems | Where-Object { $_.source -eq "defender_machine" })
-    $hunting = @($DefenderItems | Where-Object { $_.source -eq "defender_hunting" })
-    $missingKbs = @($DefenderItems | Where-Object { $_.source -eq "defender_missing_kb" })
-
-    return [PSCustomObject]@{
-        Alerts     = $alerts
-        Machines   = $machines
-        Hunting    = $hunting
-        MissingKbs = $missingKbs
-    }
-}
-
 function Get-DuplicateHostnameMap {
     param (
         [Parameter(Mandatory)]
-        [array]$AllNames
+        [object[]]$Names
     )
 
-    $map = @{}
     $counts = @{}
 
-    foreach ($name in $AllNames) {
-        if ([string]::IsNullOrWhiteSpace($name)) {
+    foreach ($name in $Names) {
+        if ([string]::IsNullOrWhiteSpace([string]$name)) {
             continue
         }
 
-        $normalized = Normalize-CorrelationString -Value $name
-
+        $normalized = Normalize-CorrelationKey -Value ([string]$name)
         if (-not $counts.ContainsKey($normalized)) {
             $counts[$normalized] = 0
         }
@@ -396,99 +319,198 @@ function Get-DuplicateHostnameMap {
         $counts[$normalized]++
     }
 
-    foreach ($key in $counts.Keys) {
-        $map[$key] = $counts[$key]
-    }
-
-    return $map
+    return $counts
 }
 
-function Build-CorrelatedDevice {
+function Resolve-MatchStatus {
     param (
         [Parameter(Mandatory)]
-        $TrendItem,
-
+        [bool]$HasTrend,
         [Parameter(Mandatory)]
-        [array]$EntraMatches,
-
+        [bool]$HasEntra,
         [Parameter(Mandatory)]
-        [array]$IntuneMatches,
+        [bool]$HasIntune,
+        [Parameter(Mandatory)]
+        [bool]$HasDefender
+    )
 
+    $trueCount = 0
+    foreach ($flag in @($HasTrend, $HasEntra, $HasIntune, $HasDefender)) {
+        if ($flag) {
+            $trueCount++
+        }
+    }
+
+    switch ($trueCount) {
+        4 { return "full_match_all_sources" }
+        3 { return "strong_match_three_sources" }
+        2 { return "partial_match_two_sources" }
+        default { return "single_source_only" }
+    }
+}
+
+function Get-DefenderItemsForDevice {
+    param (
+        $DefenderData,
+        [AllowNull()]
+        [string]$DeviceName,
+        [AllowNull()]
+        [string]$AadDeviceId
+    )
+
+    if ($null -eq $DefenderData) {
+        return @()
+    }
+
+    $items = New-Object System.Collections.Generic.List[object]
+
+    foreach ($item in (Get-IndexedRecords -Index $DefenderData.ByDeviceName -Key $DeviceName)) {
+        [void]$items.Add($item)
+    }
+
+    foreach ($item in (Get-IndexedRecords -Index $DefenderData.ByAadDeviceId -Key $AadDeviceId)) {
+        [void]$items.Add($item)
+    }
+
+    $uniqueItems = New-Object System.Collections.Generic.List[object]
+    $seen = @{}
+
+    foreach ($item in $items) {
+        $identityPart = Get-FirstMeaningfulValue -Values @(
+            $item.alert_id,
+            $item.machine_id,
+            $item.kb_id,
+            $item.device_id,
+            $item.device_name,
+            $item.aad_device_id
+        )
+
+        $fingerprint = "{0}|{1}" -f $item.source, $identityPart
+
+        if (-not $seen.ContainsKey($fingerprint)) {
+            $seen[$fingerprint] = $true
+            [void]$uniqueItems.Add($item)
+        }
+    }
+
+    return @($uniqueItems)
+}
+
+function Group-DefenderSignals {
+    param (
+        [Parameter(Mandatory)]
+        [array]$Items
+    )
+
+    return [PSCustomObject]@{
+        Alerts     = @($Items | Where-Object { $_.source -eq "defender_alert" })
+        Machines   = @($Items | Where-Object { $_.source -eq "defender_machine" })
+        Hunting    = @($Items | Where-Object { $_.source -eq "defender_hunting" })
+        MissingKbs = @($Items | Where-Object { $_.source -eq "defender_missing_kb" })
+    }
+}
+
+function Build-UnifiedDevice {
+    param (
+        $TrendRecord,
+        [Parameter(Mandatory)]
+        [array]$EntraRecords,
+        [Parameter(Mandatory)]
+        [array]$IntuneRecords,
         [Parameter(Mandatory)]
         [array]$DefenderItems,
-
         [Parameter(Mandatory)]
         [hashtable]$DuplicateHostnames
     )
 
-    $defenderGroups = Group-DefenderSignals -DefenderItems $DefenderItems
+    $defenderGroups = Group-DefenderSignals -Items $DefenderItems
 
-    $deviceName = Get-FirstNonEmptyValue -Values @(
-        (Get-CorrelationDeviceName -Item $TrendItem),
-        ($EntraMatches | ForEach-Object { Get-CorrelationDeviceName -Item $_ }),
-        ($IntuneMatches | ForEach-Object { Get-CorrelationDeviceName -Item $_ }),
-        ($DefenderItems | ForEach-Object { Get-CorrelationDeviceName -Item $_ })
+    $deviceName = Get-FirstMeaningfulValue -Values @(
+        (Get-DeviceNameFromRecord -Record $TrendRecord),
+        ($EntraRecords | ForEach-Object { Get-DeviceNameFromRecord -Record $_ }),
+        ($IntuneRecords | ForEach-Object { Get-DeviceNameFromRecord -Record $_ }),
+        ($DefenderItems | ForEach-Object { Get-DeviceNameFromRecord -Record $_ })
     )
 
-    $aadDeviceId = Get-FirstNonEmptyValue -Values @(
-        (Get-CorrelationAadDeviceId -Item $TrendItem),
-        ($EntraMatches | ForEach-Object { Get-CorrelationAadDeviceId -Item $_ }),
-        ($IntuneMatches | ForEach-Object { Get-CorrelationAadDeviceId -Item $_ }),
-        ($DefenderItems | ForEach-Object { Get-CorrelationAadDeviceId -Item $_ })
+    $aadDeviceId = Get-FirstMeaningfulValue -Values @(
+        (Get-AadDeviceIdFromRecord -Record $TrendRecord),
+        ($EntraRecords | ForEach-Object { Get-AadDeviceIdFromRecord -Record $_ }),
+        ($IntuneRecords | ForEach-Object { Get-AadDeviceIdFromRecord -Record $_ }),
+        ($DefenderItems | ForEach-Object { Get-AadDeviceIdFromRecord -Record $_ })
     )
 
-    $primaryUser = Get-FirstNonEmptyValue -Values @(
-        (Get-CorrelationPrimaryUser -Item $TrendItem),
-        ($IntuneMatches | ForEach-Object { Get-CorrelationPrimaryUser -Item $_ }),
-        ($EntraMatches | ForEach-Object { Get-CorrelationPrimaryUser -Item $_ })
+    $primaryUser = Get-FirstMeaningfulValue -Values @(
+        (Get-PrimaryUserFromRecord -Record $TrendRecord),
+        ($IntuneRecords | ForEach-Object { Get-PrimaryUserFromRecord -Record $_ }),
+        ($EntraRecords | ForEach-Object { Get-PrimaryUserFromRecord -Record $_ })
     )
 
-    $hasTrend = $null -ne $TrendItem
-    $hasEntra = $EntraMatches.Count -gt 0
-    $hasIntune = $IntuneMatches.Count -gt 0
-    $hasDefenderAlert = $defenderGroups.Alerts.Count -gt 0
-    $hasDefenderMachine = $defenderGroups.Machines.Count -gt 0
-    $hasDefenderHunting = $defenderGroups.Hunting.Count -gt 0
-    $hasMissingKbs = $defenderGroups.MissingKbs.Count -gt 0
-    $hasAnyDefender = $hasDefenderAlert -or $hasDefenderMachine -or $hasDefenderHunting -or $hasMissingKbs
+    $deviceOs = Get-FirstMeaningfulValue -Values @(
+        (Get-PropertyValue -Record $TrendRecord -PropertyNames @("platform", "operatingSystem")),
+        ($IntuneRecords | ForEach-Object { Get-PropertyValue -Record $_ -PropertyNames @("operatingSystem") }),
+        ($EntraRecords | ForEach-Object { Get-PropertyValue -Record $_ -PropertyNames @("operatingSystem") }),
+        ($defenderGroups.Machines | ForEach-Object { Get-PropertyValue -Record $_ -PropertyNames @("os_platform") })
+    )
+
+    $deviceOsVersion = Get-FirstMeaningfulValue -Values @(
+        ($IntuneRecords | ForEach-Object { Get-PropertyValue -Record $_ -PropertyNames @("osVersion") }),
+        ($EntraRecords | ForEach-Object { Get-PropertyValue -Record $_ -PropertyNames @("operatingSystemVersion") })
+    )
+
+    $hasTrend = ($null -ne $TrendRecord)
+    $hasEntra = ($EntraRecords.Count -gt 0)
+    $hasIntune = ($IntuneRecords.Count -gt 0)
+    $hasDefenderAlert = ($defenderGroups.Alerts.Count -gt 0)
+    $hasDefenderMachine = ($defenderGroups.Machines.Count -gt 0)
+    $hasDefenderHunting = ($defenderGroups.Hunting.Count -gt 0)
+    $hasMissingKbs = ($defenderGroups.MissingKbs.Count -gt 0)
+    $hasDefender = ($hasDefenderAlert -or $hasDefenderMachine -or $hasDefenderHunting -or $hasMissingKbs)
 
     $matchStatus = Resolve-MatchStatus `
         -HasTrend $hasTrend `
         -HasEntra $hasEntra `
         -HasIntune $hasIntune `
-        -HasDefender $hasAnyDefender
+        -HasDefender $hasDefender
 
-    $duplicateCount = 0
-    $normalizedName = Normalize-CorrelationString -Value $deviceName
+    $normalizedName = Normalize-CorrelationKey -Value $deviceName
+    $duplicateHostnameCount = 0
     if ($normalizedName -and $DuplicateHostnames.ContainsKey($normalizedName)) {
-        $duplicateCount = [int]$DuplicateHostnames[$normalizedName]
+        $duplicateHostnameCount = [int]$DuplicateHostnames[$normalizedName]
     }
+
+    $intuneComplianceState = Get-FirstMeaningfulValue -Values @(
+        $IntuneRecords | ForEach-Object { Get-PropertyValue -Record $_ -PropertyNames @("complianceState") }
+    )
+
+    $entraTrustType = Get-FirstMeaningfulValue -Values @(
+        $EntraRecords | ForEach-Object { Get-PropertyValue -Record $_ -PropertyNames @("trustType") }
+    )
+
+    $defenderOnboardingStatus = Get-FirstMeaningfulValue -Values @(
+        $defenderGroups.Machines | ForEach-Object { Get-PropertyValue -Record $_ -PropertyNames @("onboarding_status") }
+    )
+
+    $defenderMachineActive = Test-ContainsTrue -Values @(
+        $defenderGroups.Machines | ForEach-Object { Get-PropertyValue -Record $_ -PropertyNames @("is_active") }
+    )
+
+    $missingKbIds = Get-UniqueStringValues -Values @(
+        $defenderGroups.MissingKbs | ForEach-Object { Get-PropertyValue -Record $_ -PropertyNames @("kb_id") }
+    )
+
+    $missingKbNames = Get-UniqueStringValues -Values @(
+        $defenderGroups.MissingKbs | ForEach-Object { Get-PropertyValue -Record $_ -PropertyNames @("kb_name") }
+    )
 
     $issues = New-Object System.Collections.Generic.List[string]
 
-    if (-not $hasEntra) {
-        [void]$issues.Add("missing_in_entra")
-    }
+    if (-not $hasEntra) { [void]$issues.Add("missing_in_entra") }
+    if (-not $hasIntune) { [void]$issues.Add("missing_in_intune") }
+    if (-not $hasTrend) { [void]$issues.Add("missing_in_trend") }
+    if (-not $hasDefender) { [void]$issues.Add("missing_in_defender") }
 
-    if (-not $hasIntune) {
-        [void]$issues.Add("missing_in_intune")
-    }
-
-    if (-not $hasTrend) {
-        [void]$issues.Add("missing_in_trend")
-    }
-
-    if (-not $hasAnyDefender) {
-        [void]$issues.Add("missing_in_defender")
-    }
-
-    if ($hasDefenderAlert) {
-        [void]$issues.Add("defender_alert_present")
-    }
-
-    if ($hasMissingKbs) {
-        [void]$issues.Add("missing_security_updates")
-    }
+    if ($hasDefenderAlert) { [void]$issues.Add("defender_alert_present") }
+    if ($hasMissingKbs) { [void]$issues.Add("missing_security_updates") }
 
     if ($hasTrend -and -not $hasDefenderMachine) {
         [void]$issues.Add("defender_visibility_gap")
@@ -498,47 +520,23 @@ function Build-CorrelatedDevice {
         [void]$issues.Add("registered_not_managed")
     }
 
-    if ($duplicateCount -gt 1) {
-        [void]$issues.Add("duplicate_hostname")
-    }
-
-    $intuneComplianceState = Get-FirstNonEmptyValue -Values @(
-        $IntuneMatches | ForEach-Object { $_.complianceState }
-    )
-
-    if ($intuneComplianceState -and $intuneComplianceState -ne "compliant") {
+    if ($intuneComplianceState -and ($intuneComplianceState -ne "compliant")) {
         [void]$issues.Add("device_noncompliant")
     }
-
-    $entraTrustType = Get-FirstNonEmptyValue -Values @(
-        $EntraMatches | ForEach-Object { $_.trustType }
-    )
 
     if ($entraTrustType -eq "Workplace") {
         [void]$issues.Add("probable_private_byod")
     }
 
-    $machineOnboardingStatus = Get-FirstNonEmptyValue -Values @(
-        $defenderGroups.Machines | ForEach-Object { $_.onboarding_status }
-    )
+    if ($duplicateHostnameCount -gt 1) {
+        [void]$issues.Add("duplicate_hostname")
+    }
 
-    $machineIsActive = Test-AnyTrue -Values @(
-        $defenderGroups.Machines | ForEach-Object { $_.is_active }
-    )
-
-    if ($hasDefenderMachine -and -not $machineIsActive) {
+    if ($hasDefenderMachine -and -not $defenderMachineActive) {
         [void]$issues.Add("inactive_defender_device")
     }
 
-    $missingKbIds = Get-UniqueStringListSafe -Values @(
-        $defenderGroups.MissingKbs | ForEach-Object { $_.kb_id }
-    )
-
-    $missingKbNames = Get-UniqueStringListSafe -Values @(
-        $defenderGroups.MissingKbs | ForEach-Object { $_.kb_name }
-    )
-
-    $defenderVisibilityStatus = if ($hasAnyDefender) {
+    $defenderVisibilityStatus = if ($hasDefender) {
         if ($hasDefenderMachine -and $hasDefenderHunting) {
             "strong_visibility"
         }
@@ -552,18 +550,6 @@ function Build-CorrelatedDevice {
     else {
         "no_visibility"
     }
-
-    $deviceOs = Get-FirstNonEmptyValue -Values @(
-        $TrendItem.platform,
-        ($IntuneMatches | ForEach-Object { $_.operatingSystem }),
-        ($EntraMatches | ForEach-Object { $_.operatingSystem }),
-        ($defenderGroups.Machines | ForEach-Object { $_.os_platform })
-    )
-
-    $deviceOsVersion = Get-FirstNonEmptyValue -Values @(
-        ($IntuneMatches | ForEach-Object { $_.osVersion }),
-        ($EntraMatches | ForEach-Object { $_.operatingSystemVersion })
-    )
 
     return [PSCustomObject]@{
         device_name                = $deviceName
@@ -584,7 +570,7 @@ function Build-CorrelatedDevice {
             trend    = $hasTrend
             entra    = $hasEntra
             intune   = $hasIntune
-            defender = $hasAnyDefender
+            defender = $hasDefender
         }
 
         match_status               = $matchStatus
@@ -592,21 +578,21 @@ function Build-CorrelatedDevice {
 
         intune_compliance_state    = $intuneComplianceState
         entra_trust_type           = $entraTrustType
-        defender_onboarding_status = $machineOnboardingStatus
-        defender_machine_active    = $machineIsActive
+        defender_onboarding_status = $defenderOnboardingStatus
+        defender_machine_active    = $defenderMachineActive
 
         missing_kb_count           = $missingKbIds.Count
         missing_kb_ids             = $missingKbIds
         missing_kb_names           = $missingKbNames
 
-        duplicate_hostname         = ($duplicateCount -gt 1)
-        duplicate_hostname_count   = $duplicateCount
+        duplicate_hostname         = ($duplicateHostnameCount -gt 1)
+        duplicate_hostname_count   = $duplicateHostnameCount
 
-        issues                     = @($issues | Select-Object -Unique)
+        issues                     = @($issues)
 
-        trend_data                 = $TrendItem
-        entra_data                 = @($EntraMatches)
-        intune_data                = @($IntuneMatches)
+        trend_data                 = $TrendRecord
+        entra_data                 = @($EntraRecords)
+        intune_data                = @($IntuneRecords)
         defender_alerts            = @($defenderGroups.Alerts)
         defender_machines          = @($defenderGroups.Machines)
         defender_hunting           = @($defenderGroups.Hunting)
@@ -614,78 +600,74 @@ function Build-CorrelatedDevice {
     }
 }
 
-function Add-OrMergeCandidate {
+function Add-OrUpdateUnifiedDevice {
     param (
         [Parameter(Mandatory)]
-        [hashtable]$Candidates,
-
+        [hashtable]$DeviceMap,
         [Parameter(Mandatory)]
-        $Device
+        $UnifiedDevice
     )
 
-    $key = Get-FirstNonEmptyValue -Values @(
-        $Device.aad_device_id,
-        $Device.device_name
+    $preferredKey = Get-FirstMeaningfulValue -Values @(
+        $UnifiedDevice.aad_device_id,
+        $UnifiedDevice.device_name
     )
 
-    if ([string]::IsNullOrWhiteSpace([string]$key)) {
-        $key = [guid]::NewGuid().ToString()
+    if ([string]::IsNullOrWhiteSpace([string]$preferredKey)) {
+        $preferredKey = [guid]::NewGuid().ToString()
     }
 
-    $normalizedKey = Normalize-CorrelationString -Value ([string]$key)
+    $normalizedKey = Normalize-CorrelationKey -Value ([string]$preferredKey)
 
-    if (-not $Candidates.ContainsKey($normalizedKey)) {
-        $Candidates[$normalizedKey] = $Device
+    if (-not $DeviceMap.ContainsKey($normalizedKey)) {
+        $DeviceMap[$normalizedKey] = $UnifiedDevice
         return
     }
 
-    $existing = $Candidates[$normalizedKey]
+    $existing = $DeviceMap[$normalizedKey]
 
-    $existingIssues = @($existing.issues)
-    $newIssues = @($Device.issues)
+    $existing.issues = @($existing.issues + $UnifiedDevice.issues | Select-Object -Unique)
 
-    $mergedIssues = @($existingIssues + $newIssues | Select-Object -Unique)
+    $existing.has_trend = ($existing.has_trend -or $UnifiedDevice.has_trend)
+    $existing.has_entra = ($existing.has_entra -or $UnifiedDevice.has_entra)
+    $existing.has_intune = ($existing.has_intune -or $UnifiedDevice.has_intune)
+    $existing.has_defender_alert = ($existing.has_defender_alert -or $UnifiedDevice.has_defender_alert)
+    $existing.has_defender_machine = ($existing.has_defender_machine -or $UnifiedDevice.has_defender_machine)
+    $existing.has_defender_hunting = ($existing.has_defender_hunting -or $UnifiedDevice.has_defender_hunting)
+    $existing.has_missing_kbs = ($existing.has_missing_kbs -or $UnifiedDevice.has_missing_kbs)
 
-    $existing.issues = $mergedIssues
+    if (-not $existing.primary_user -and $UnifiedDevice.primary_user) { $existing.primary_user = $UnifiedDevice.primary_user }
+    if (-not $existing.device_os -and $UnifiedDevice.device_os) { $existing.device_os = $UnifiedDevice.device_os }
+    if (-not $existing.device_os_version -and $UnifiedDevice.device_os_version) { $existing.device_os_version = $UnifiedDevice.device_os_version }
+    if (-not $existing.intune_compliance_state -and $UnifiedDevice.intune_compliance_state) { $existing.intune_compliance_state = $UnifiedDevice.intune_compliance_state }
+    if (-not $existing.entra_trust_type -and $UnifiedDevice.entra_trust_type) { $existing.entra_trust_type = $UnifiedDevice.entra_trust_type }
+    if (-not $existing.defender_onboarding_status -and $UnifiedDevice.defender_onboarding_status) { $existing.defender_onboarding_status = $UnifiedDevice.defender_onboarding_status }
 
-    if (-not $existing.has_entra -and $Device.has_entra) { $existing.has_entra = $true }
-    if (-not $existing.has_intune -and $Device.has_intune) { $existing.has_intune = $true }
-    if (-not $existing.has_trend -and $Device.has_trend) { $existing.has_trend = $true }
-    if (-not $existing.has_defender_alert -and $Device.has_defender_alert) { $existing.has_defender_alert = $true }
-    if (-not $existing.has_defender_machine -and $Device.has_defender_machine) { $existing.has_defender_machine = $true }
-    if (-not $existing.has_defender_hunting -and $Device.has_defender_hunting) { $existing.has_defender_hunting = $true }
-    if (-not $existing.has_missing_kbs -and $Device.has_missing_kbs) { $existing.has_missing_kbs = $true }
+    $existing.defender_machine_active = ($existing.defender_machine_active -or $UnifiedDevice.defender_machine_active)
 
-    if (-not $existing.primary_user -and $Device.primary_user) { $existing.primary_user = $Device.primary_user }
-    if (-not $existing.device_os -and $Device.device_os) { $existing.device_os = $Device.device_os }
-    if (-not $existing.device_os_version -and $Device.device_os_version) { $existing.device_os_version = $Device.device_os_version }
-
-    $existing.missing_kb_ids = @($existing.missing_kb_ids + $Device.missing_kb_ids | Select-Object -Unique)
-    $existing.missing_kb_names = @($existing.missing_kb_names + $Device.missing_kb_names | Select-Object -Unique)
+    $existing.missing_kb_ids = @($existing.missing_kb_ids + $UnifiedDevice.missing_kb_ids | Select-Object -Unique)
+    $existing.missing_kb_names = @($existing.missing_kb_names + $UnifiedDevice.missing_kb_names | Select-Object -Unique)
     $existing.missing_kb_count = $existing.missing_kb_ids.Count
 
-    $existing.defender_alerts = @($existing.defender_alerts + $Device.defender_alerts)
-    $existing.defender_machines = @($existing.defender_machines + $Device.defender_machines)
-    $existing.defender_hunting = @($existing.defender_hunting + $Device.defender_hunting)
-    $existing.defender_missing_kbs = @($existing.defender_missing_kbs + $Device.defender_missing_kbs)
+    $existing.entra_data = @($existing.entra_data + $UnifiedDevice.entra_data)
+    $existing.intune_data = @($existing.intune_data + $UnifiedDevice.intune_data)
+    $existing.defender_alerts = @($existing.defender_alerts + $UnifiedDevice.defender_alerts)
+    $existing.defender_machines = @($existing.defender_machines + $UnifiedDevice.defender_machines)
+    $existing.defender_hunting = @($existing.defender_hunting + $UnifiedDevice.defender_hunting)
+    $existing.defender_missing_kbs = @($existing.defender_missing_kbs + $UnifiedDevice.defender_missing_kbs)
 
-    $existing.entra_data = @($existing.entra_data + $Device.entra_data)
-    $existing.intune_data = @($existing.intune_data + $Device.intune_data)
+    if (-not $existing.trend_data -and $UnifiedDevice.trend_data) {
+        $existing.trend_data = $UnifiedDevice.trend_data
+    }
+
+    $existing.duplicate_hostname_count = [Math]::Max([int]$existing.duplicate_hostname_count, [int]$UnifiedDevice.duplicate_hostname_count)
+    $existing.duplicate_hostname = ($existing.duplicate_hostname_count -gt 1)
 
     $existing.source_presence = [PSCustomObject]@{
-        trend    = ($existing.has_trend -or $Device.has_trend)
-        entra    = ($existing.has_entra -or $Device.has_entra)
-        intune   = ($existing.has_intune -or $Device.has_intune)
-        defender = (
-            $existing.has_defender_alert -or
-            $existing.has_defender_machine -or
-            $existing.has_defender_hunting -or
-            $existing.has_missing_kbs -or
-            $Device.has_defender_alert -or
-            $Device.has_defender_machine -or
-            $Device.has_defender_hunting -or
-            $Device.has_missing_kbs
-        )
+        trend    = $existing.has_trend
+        entra    = $existing.has_entra
+        intune   = $existing.has_intune
+        defender = ($existing.has_defender_alert -or $existing.has_defender_machine -or $existing.has_defender_hunting -or $existing.has_missing_kbs)
     }
 
     $existing.match_status = Resolve-MatchStatus `
@@ -693,62 +675,74 @@ function Add-OrMergeCandidate {
         -HasEntra $existing.has_entra `
         -HasIntune $existing.has_intune `
         -HasDefender $existing.source_presence.defender
+
+    $existing.defender_visibility_status = if ($existing.source_presence.defender) {
+        if ($existing.has_defender_machine -and $existing.has_defender_hunting) {
+            "strong_visibility"
+        }
+        elseif ($existing.has_defender_alert -or $existing.has_missing_kbs) {
+            "partial_visibility_with_security_signal"
+        }
+        else {
+            "partial_visibility"
+        }
+    }
+    else {
+        "no_visibility"
+    }
 }
 
 function Invoke-Correlation {
     param (
         [Parameter(Mandatory)]
         [array]$EntraDevices,
-
         [Parameter(Mandatory)]
         [array]$IntuneDevices,
-
         [Parameter(Mandatory)]
         [array]$TrendDevices,
-
         $DefenderData
     )
 
     Write-Log "Building correlation indexes..."
 
-    $entraIndex = New-CorrelationIndex -Items $EntraDevices
-    $intuneIndex = New-CorrelationIndex -Items $IntuneDevices
+    $entraIndex = New-RecordIndex -Records $EntraDevices
+    $intuneIndex = New-RecordIndex -Records $IntuneDevices
 
-    $allNames = @()
-    $allNames += $TrendDevices | ForEach-Object { Get-CorrelationDeviceName -Item $_ }
-    $allNames += $EntraDevices | ForEach-Object { Get-CorrelationDeviceName -Item $_ }
-    $allNames += $IntuneDevices | ForEach-Object { Get-CorrelationDeviceName -Item $_ }
+    $allKnownNames = @()
+    $allKnownNames += ($TrendDevices | ForEach-Object { Get-DeviceNameFromRecord -Record $_ })
+    $allKnownNames += ($EntraDevices | ForEach-Object { Get-DeviceNameFromRecord -Record $_ })
+    $allKnownNames += ($IntuneDevices | ForEach-Object { Get-DeviceNameFromRecord -Record $_ })
 
     if ($null -ne $DefenderData) {
-        $allNames += $DefenderData.Machines | ForEach-Object { $_.device_name }
-        $allNames += $DefenderData.Hunting | ForEach-Object { $_.device_name }
-        $allNames += $DefenderData.Alerts | ForEach-Object { $_.device_name }
+        $allKnownNames += ($DefenderData.Alerts | ForEach-Object { $_.device_name })
+        $allKnownNames += ($DefenderData.Machines | ForEach-Object { $_.device_name })
+        $allKnownNames += ($DefenderData.Hunting | ForEach-Object { $_.device_name })
+        $allKnownNames += ($DefenderData.MissingKbs | ForEach-Object { $_.device_name })
     }
 
-    $duplicateHostnames = Get-DuplicateHostnameMap -AllNames $allNames
-
-    $correlated = @{}
+    $duplicateHostnames = Get-DuplicateHostnameMap -Names $allKnownNames
+    $deviceMap = @{}
     $processedNameKeys = @{}
     $processedIdKeys = @{}
 
     foreach ($trendDevice in $TrendDevices) {
-        $deviceName = Get-CorrelationDeviceName -Item $trendDevice
-        $aadDeviceId = Get-CorrelationAadDeviceId -Item $trendDevice
+        $deviceName = Get-DeviceNameFromRecord -Record $trendDevice
+        $aadDeviceId = Get-AadDeviceIdFromRecord -Record $trendDevice
 
         $entraMatches = @()
         $intuneMatches = @()
 
         if ($aadDeviceId) {
-            $entraMatches += Get-IndexedItems -Index $entraIndex.ByAadDeviceId -Key $aadDeviceId
-            $intuneMatches += Get-IndexedItems -Index $intuneIndex.ByAadDeviceId -Key $aadDeviceId
+            $entraMatches += Get-IndexedRecords -Index $entraIndex.ByAadDeviceId -Key $aadDeviceId
+            $intuneMatches += Get-IndexedRecords -Index $intuneIndex.ByAadDeviceId -Key $aadDeviceId
         }
 
         if (($entraMatches.Count -eq 0) -and $deviceName) {
-            $entraMatches += Get-IndexedItems -Index $entraIndex.ByName -Key $deviceName
+            $entraMatches += Get-IndexedRecords -Index $entraIndex.ByName -Key $deviceName
         }
 
         if (($intuneMatches.Count -eq 0) -and $deviceName) {
-            $intuneMatches += Get-IndexedItems -Index $intuneIndex.ByName -Key $deviceName
+            $intuneMatches += Get-IndexedRecords -Index $intuneIndex.ByName -Key $deviceName
         }
 
         $defenderItems = Get-DefenderItemsForDevice `
@@ -756,34 +750,34 @@ function Invoke-Correlation {
             -DeviceName $deviceName `
             -AadDeviceId $aadDeviceId
 
-        $device = Build-CorrelatedDevice `
-            -TrendItem $trendDevice `
-            -EntraMatches @($entraMatches) `
-            -IntuneMatches @($intuneMatches) `
+        $unifiedDevice = Build-UnifiedDevice `
+            -TrendRecord $trendDevice `
+            -EntraRecords @($entraMatches) `
+            -IntuneRecords @($intuneMatches) `
             -DefenderItems @($defenderItems) `
             -DuplicateHostnames $duplicateHostnames
 
-        Add-OrMergeCandidate -Candidates $correlated -Device $device
+        Add-OrUpdateUnifiedDevice -DeviceMap $deviceMap -UnifiedDevice $unifiedDevice
 
         if ($deviceName) {
-            $processedNameKeys[(Normalize-CorrelationString -Value $deviceName)] = $true
+            $processedNameKeys[(Normalize-CorrelationKey -Value $deviceName)] = $true
         }
 
         if ($aadDeviceId) {
-            $processedIdKeys[(Normalize-CorrelationString -Value $aadDeviceId)] = $true
+            $processedIdKeys[(Normalize-CorrelationKey -Value $aadDeviceId)] = $true
         }
     }
 
     foreach ($entraDevice in $EntraDevices) {
-        $deviceName = Get-CorrelationDeviceName -Item $entraDevice
-        $aadDeviceId = Get-CorrelationAadDeviceId -Item $entraDevice
+        $deviceName = Get-DeviceNameFromRecord -Record $entraDevice
+        $aadDeviceId = Get-AadDeviceIdFromRecord -Record $entraDevice
 
         $alreadyProcessed = $false
 
-        if ($aadDeviceId -and $processedIdKeys.ContainsKey((Normalize-CorrelationString -Value $aadDeviceId))) {
+        if ($aadDeviceId -and $processedIdKeys.ContainsKey((Normalize-CorrelationKey -Value $aadDeviceId))) {
             $alreadyProcessed = $true
         }
-        elseif ($deviceName -and $processedNameKeys.ContainsKey((Normalize-CorrelationString -Value $deviceName))) {
+        elseif ($deviceName -and $processedNameKeys.ContainsKey((Normalize-CorrelationKey -Value $deviceName))) {
             $alreadyProcessed = $true
         }
 
@@ -792,11 +786,13 @@ function Invoke-Correlation {
         }
 
         $intuneMatches = @()
+
         if ($aadDeviceId) {
-            $intuneMatches += Get-IndexedItems -Index $intuneIndex.ByAadDeviceId -Key $aadDeviceId
+            $intuneMatches += Get-IndexedRecords -Index $intuneIndex.ByAadDeviceId -Key $aadDeviceId
         }
+
         if (($intuneMatches.Count -eq 0) -and $deviceName) {
-            $intuneMatches += Get-IndexedItems -Index $intuneIndex.ByName -Key $deviceName
+            $intuneMatches += Get-IndexedRecords -Index $intuneIndex.ByName -Key $deviceName
         }
 
         $defenderItems = Get-DefenderItemsForDevice `
@@ -804,26 +800,26 @@ function Invoke-Correlation {
             -DeviceName $deviceName `
             -AadDeviceId $aadDeviceId
 
-        $device = Build-CorrelatedDevice `
-            -TrendItem $null `
-            -EntraMatches @($entraDevice) `
-            -IntuneMatches @($intuneMatches) `
+        $unifiedDevice = Build-UnifiedDevice `
+            -TrendRecord $null `
+            -EntraRecords @($entraDevice) `
+            -IntuneRecords @($intuneMatches) `
             -DefenderItems @($defenderItems) `
             -DuplicateHostnames $duplicateHostnames
 
-        Add-OrMergeCandidate -Candidates $correlated -Device $device
+        Add-OrUpdateUnifiedDevice -DeviceMap $deviceMap -UnifiedDevice $unifiedDevice
     }
 
     foreach ($intuneDevice in $IntuneDevices) {
-        $deviceName = Get-CorrelationDeviceName -Item $intuneDevice
-        $aadDeviceId = Get-CorrelationAadDeviceId -Item $intuneDevice
+        $deviceName = Get-DeviceNameFromRecord -Record $intuneDevice
+        $aadDeviceId = Get-AadDeviceIdFromRecord -Record $intuneDevice
 
         $alreadyProcessed = $false
 
-        if ($aadDeviceId -and $processedIdKeys.ContainsKey((Normalize-CorrelationString -Value $aadDeviceId))) {
+        if ($aadDeviceId -and $processedIdKeys.ContainsKey((Normalize-CorrelationKey -Value $aadDeviceId))) {
             $alreadyProcessed = $true
         }
-        elseif ($deviceName -and $processedNameKeys.ContainsKey((Normalize-CorrelationString -Value $deviceName))) {
+        elseif ($deviceName -and $processedNameKeys.ContainsKey((Normalize-CorrelationKey -Value $deviceName))) {
             $alreadyProcessed = $true
         }
 
@@ -832,11 +828,13 @@ function Invoke-Correlation {
         }
 
         $entraMatches = @()
+
         if ($aadDeviceId) {
-            $entraMatches += Get-IndexedItems -Index $entraIndex.ByAadDeviceId -Key $aadDeviceId
+            $entraMatches += Get-IndexedRecords -Index $entraIndex.ByAadDeviceId -Key $aadDeviceId
         }
+
         if (($entraMatches.Count -eq 0) -and $deviceName) {
-            $entraMatches += Get-IndexedItems -Index $entraIndex.ByName -Key $deviceName
+            $entraMatches += Get-IndexedRecords -Index $entraIndex.ByName -Key $deviceName
         }
 
         $defenderItems = Get-DefenderItemsForDevice `
@@ -844,18 +842,18 @@ function Invoke-Correlation {
             -DeviceName $deviceName `
             -AadDeviceId $aadDeviceId
 
-        $device = Build-CorrelatedDevice `
-            -TrendItem $null `
-            -EntraMatches @($entraMatches) `
-            -IntuneMatches @($intuneDevice) `
+        $unifiedDevice = Build-UnifiedDevice `
+            -TrendRecord $null `
+            -EntraRecords @($entraMatches) `
+            -IntuneRecords @($intuneDevice) `
             -DefenderItems @($defenderItems) `
             -DuplicateHostnames $duplicateHostnames
 
-        Add-OrMergeCandidate -Candidates $correlated -Device $device
+        Add-OrUpdateUnifiedDevice -DeviceMap $deviceMap -UnifiedDevice $unifiedDevice
     }
 
-    $result = @($correlated.Values | Sort-Object device_name)
+    $result = @($deviceMap.Values | Sort-Object -Property device_name)
 
-    Write-Log "Correlation completed: $($result.Count) unified devices"
+    Write-Log "Correlation completed: $($result.Count) unified devices" "SUCCESS"
     return $result
 }
