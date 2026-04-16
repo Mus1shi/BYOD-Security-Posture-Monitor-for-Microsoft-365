@@ -1,0 +1,14 @@
+[
+  {
+    "deviceId": "machine-001",
+    "deviceName": "LAPTOP-CEO",
+    "sensorHealthState": "Active",
+    "clientVersion": "1.1.20000"
+  },
+  {
+    "deviceId": "machine-002",
+    "deviceName": "LAPTOP-IT",
+    "sensorHealthState": "Active",
+    "clientVersion": "1.1.20000"
+  }
+]
