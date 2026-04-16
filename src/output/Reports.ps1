@@ -1,281 +1,301 @@
 # =====================================================
-# REPORT EXPORTS - PUBLIC DEMO VERSION
-# =====================================================
-# Export:
-# - Full consolidated JSON report
-# - Helpdesk CSV / JSON report
-# - Entra-only JSON report
-# - Probable personal device JSON report
-# - Enriched Intune CSV export
+# RISK ENGINE - SECURITY DEVICE MONITOR (PUBLIC DEMO)
 # =====================================================
 
-function Export-ByodReports {
+function Add-RiskTag {
     param (
-        [array]$ConsolidatedDevices,
-        [array]$DevicesMatched,
-        [array]$DevicesPartial,
-        [array]$DevicesUnmatched,
+        [Parameter(Mandatory)]
+        [System.Collections.Generic.List[string]]$Tags,
 
-        [int]$TagCountCritical,
-        [int]$TagCountWarning,
-        [int]$TagCountNormal,
-
-        [int]$IssueNotRegisteredInEntra,
-        [int]$IssueProbablePrivateByodNotRegistered,
-        [int]$IssueNoncompliantDevice,
-        [int]$IssueByodWorkplace,
-        [int]$IssueNotManagedInIntune,
-
-        [int]$RiskLevelCritical,
-        [int]$RiskLevelHigh,
-        [int]$RiskLevelMedium,
-        [int]$RiskLevelLow,
-
-        [int]$DuplicateHostnameCount,
-
-        [array]$CleanExport,
-        [string]$ReportsPath,
-        [string]$ProcessedDataPath,
-        [string]$ProjectRoot
+        [Parameter(Mandatory)]
+        [string]$Tag
     )
 
-    Write-Host "[STEP] Exporting reports" -ForegroundColor Cyan
-
-    $date = Get-Date -Format "yyyyMMdd-HHmm"
-
-    # =====================================================
-    # FULL CONSOLIDATED JSON REPORT
-    # =====================================================
-    $fullJsonDataset = [PSCustomObject]@{
-        generated_at  = $date
-        total_records = $ConsolidatedDevices.Count
-
-        highlights    = [PSCustomObject]@{
-            urgent_devices       = @($ConsolidatedDevices | Where-Object { $_.is_urgent -eq $true }).Count
-            critical_devices     = $TagCountCritical
-            warning_devices      = $TagCountWarning
-            noncompliant_devices = @($ConsolidatedDevices | Where-Object { $_.is_noncompliant -eq $true }).Count
-
-            probable_personal_devices = @($ConsolidatedDevices | Where-Object {
-                $_.issues -contains "probable_private_byod_not_registered_in_entra"
-            }).Count
-
-            devices_not_managed_in_intune = @($ConsolidatedDevices | Where-Object {
-                $_.issues -contains "not_managed_in_intune"
-            }).Count
-
-            unmatched_devices = $DevicesUnmatched.Count
-        }
-
-        summary = [PSCustomObject]@{
-            total_devices       = $ConsolidatedDevices.Count
-
-            risk_level_critical = $RiskLevelCritical
-            risk_level_high     = $RiskLevelHigh
-            risk_level_medium   = $RiskLevelMedium
-            risk_level_low      = $RiskLevelLow
-
-            critical_devices    = $TagCountCritical
-            warning_devices     = $TagCountWarning
-            normal_devices      = $TagCountNormal
-            urgent_devices      = @($ConsolidatedDevices | Where-Object { $_.is_urgent -eq $true }).Count
-
-            issue_not_registered_in_entra              = $IssueNotRegisteredInEntra
-            issue_probable_personal_device_not_registered = $IssueProbablePrivateByodNotRegistered
-            issue_noncompliant_device                  = $IssueNoncompliantDevice
-            issue_workplace_registration               = $IssueByodWorkplace
-            issue_not_managed_in_intune                = $IssueNotManagedInIntune
-
-            matched_devices    = $DevicesMatched.Count
-            partial_devices    = $DevicesPartial.Count
-            unmatched_devices  = $DevicesUnmatched.Count
-            entra_only_devices = @($ConsolidatedDevices | Where-Object { $_.match_status -eq "present_in_entra" }).Count
-
-            duplicate_hostnames = $DuplicateHostnameCount
-
-            trend_present  = @($ConsolidatedDevices | Where-Object { $_.has_trend -eq $true }).Count
-            entra_present  = @($ConsolidatedDevices | Where-Object { $_.has_entra -eq $true }).Count
-            intune_present = @($ConsolidatedDevices | Where-Object { $_.has_intune -eq $true }).Count
-
-            registered_in_entra = @($ConsolidatedDevices | Where-Object { $_.is_registered_in_entra -eq $true }).Count
-            managed_in_intune   = @($ConsolidatedDevices | Where-Object { $_.is_managed_in_intune -eq $true }).Count
-            noncompliant_total  = @($ConsolidatedDevices | Where-Object { $_.is_noncompliant -eq $true }).Count
-
-            fully_visible     = @($ConsolidatedDevices | Where-Object { $_.source_health_status -eq "fully_visible" }).Count
-            partially_visible = @($ConsolidatedDevices | Where-Object { $_.source_health_status -eq "partially_visible" }).Count
-            source_gap        = @($ConsolidatedDevices | Where-Object { $_.source_health_status -eq "source_gap" }).Count
-            entra_visible_only = @($ConsolidatedDevices | Where-Object { $_.source_health_status -eq "entra_visible_only" }).Count
-
-            inactive_devices_30d_plus = @($ConsolidatedDevices | Where-Object {
-                $null -ne $_.days_since_last_connection -and $_.days_since_last_connection -gt 30
-            }).Count
-        }
-
-        records = $ConsolidatedDevices
+    if (-not [string]::IsNullOrWhiteSpace($Tag) -and -not $Tags.Contains($Tag)) {
+        [void]$Tags.Add($Tag)
     }
+}
 
-    $fullJsonPath = Join-Path $ReportsPath "Full_device_security_report_$date.json"
-    $fullJsonDataset | ConvertTo-Json -Depth 10 | Out-File -FilePath $fullJsonPath -Encoding UTF8
+function Get-RiskLevelFromScore {
+    param (
+        [Parameter(Mandatory)]
+        [int]$Score
+    )
 
-    $infraFilesPath = Join-Path $ProjectRoot "data\infra_files"
+    if ($Score -ge 90) { return "critical" }
+    if ($Score -ge 70) { return "high" }
+    if ($Score -ge 40) { return "warning" }
+    return "normal"
+}
 
-    if (-not (Test-Path $infraFilesPath)) {
-        New-Item -Path $infraFilesPath -ItemType Directory -Force | Out-Null
+function Get-VisualTagFromRiskLevel {
+    param (
+        [Parameter(Mandatory)]
+        [string]$RiskLevel
+    )
+
+    switch ($RiskLevel.ToLowerInvariant()) {
+        "critical" { return "critical" }
+        "high"     { return "danger" }
+        "warning"  { return "warning" }
+        default    { return "normal" }
     }
+}
 
-    $fullJsonStablePath = Join-Path $infraFilesPath "Full_device_security_report.json"
-    $fullJsonDataset | ConvertTo-Json -Depth 10 | Out-File -FilePath $fullJsonStablePath -Encoding UTF8
+function Get-RecommendedAction {
+    param (
+        [Parameter(Mandatory)]
+        $Device,
 
-    # =====================================================
-    # HELPDESK REPORT VIEW
-    # =====================================================
-    $helpdeskCases = @()
+        [Parameter(Mandatory)]
+        [string]$RiskLevel
+    )
 
-    foreach ($device in $ConsolidatedDevices) {
-        if ($device.visual_tag -eq "critical" -or $device.visual_tag -eq "warning") {
+    $issues = @($Device.issues)
 
-            $caseUser = "unknown"
-            if ($device.intune -and $device.intune.USER) {
-                $caseUser = $device.intune.USER
+    switch ($RiskLevel) {
+        "critical" {
+            if ($issues -contains "defender_alert_present") {
+                return "Investigate immediately. Review the Defender alert, validate device ownership, confirm current exposure, and trigger containment or remediation if required."
             }
 
-            $helpdeskObject = [PSCustomObject]@{
-                risk_level                 = $device.risk_level
-                risk_score                 = $device.risk_score
-                device_name                = $device.device_name
-                user                       = $caseUser
-                reason                     = $device.match_reason
-                recommended_action         = $device.recommended_action
-                is_urgent                  = $device.is_urgent
-                priority                   = $device.priority
-                status                     = $device.match_status
-                visual_tag                 = $device.visual_tag
-                issues                     = $device.issues
-
-                entra_trust_type           = $device.entra_trust_type
-
-                recent_activity            = $device.recent_activity
-                days_since_last_connection = $device.days_since_last_connection
-
-                source_health_status       = $device.source_health_status
-                source_health_reason       = $device.source_health_reason
-                trend_running              = $device.trend_running
-                entra_running              = $device.entra_running
-                intune_running             = $device.intune_running
+            if ($issues -contains "active_unpatched_device") {
+                return "Prioritize patch remediation immediately. Confirm the missing KB scope, validate management ownership, and reduce exposure without delay."
             }
 
-            $helpdeskCases += $helpdeskObject
+            return "Investigate this device as a priority. Validate security visibility, management state, ownership, and remediation path."
         }
-    }
 
-    $helpdeskCases = $helpdeskCases | Sort-Object `
-        @{ Expression = {
-                switch ($_.priority) {
-                    "urgent" { 0 }
-                    "high"   { 1 }
-                    "medium" { 2 }
-                    "normal" { 3 }
-                    default  { 4 }
-                }
+        "high" {
+            if ($issues -contains "missing_security_updates") {
+                return "Review missing security updates, confirm which KBs are missing, and schedule remediation as soon as possible."
             }
-        },
-        @{ Expression = { $_.risk_score }; Descending = $true },
-        @{ Expression = {
-                switch ($_.visual_tag) {
-                    "critical" { 0 }
-                    "warning"  { 1 }
-                    "normal"   { 2 }
-                    default    { 3 }
-                }
+
+            if ($issues -contains "registered_not_managed") {
+                return "Confirm whether this device should be managed. Enroll it, restrict it, or monitor it more closely depending on policy."
             }
+
+            return "Review the identified security and management gaps and assign clear remediation ownership."
         }
 
-    $helpDeskReportPathCsv = Join-Path $ReportsPath "device_helpdesk_report_$date.csv"
-    $helpDeskReportPathJson = Join-Path $ReportsPath "device_helpdesk_report_$date.json"
-
-    $helpdeskCases | Export-Csv -Path $helpDeskReportPathCsv -NoTypeInformation -Delimiter ";"
-    $helpdeskCases | ConvertTo-Json -Depth 10 | Out-File -FilePath $helpDeskReportPathJson -Encoding UTF8
-
-    # =====================================================
-    # ENTRA-ONLY DEVICES REPORT
-    # =====================================================
-    $onlyEntraDevices = $ConsolidatedDevices | Where-Object {
-        $_.match_status -eq "present_in_entra"
-    }
-
-    $onlyEntraDevicesPath = Join-Path $ReportsPath "entra_only_devices_$date.json"
-
-    $onlyEntraDevicesFile = [PSCustomObject]@{
-        generated_at  = $date
-        total_devices = $onlyEntraDevices.Count
-        summary       = [PSCustomObject]@{
-            total_devices             = $onlyEntraDevices.Count
-            managed_in_intune         = @($onlyEntraDevices | Where-Object { $_.is_managed_in_intune -eq $true }).Count
-            not_managed_in_intune     = @($onlyEntraDevices | Where-Object { $_.is_managed_in_intune -eq $false }).Count
-            noncompliant_devices      = @($onlyEntraDevices | Where-Object { $_.is_noncompliant -eq $true }).Count
-            workplace_devices         = @($onlyEntraDevices | Where-Object { $_.entra_trust_type -eq "Workplace" }).Count
-            inactive_devices_30d_plus = @($onlyEntraDevices | Where-Object {
-                $null -ne $_.days_since_last_connection -and $_.days_since_last_connection -gt 30
-            }).Count
-        }
-        records       = $onlyEntraDevices
-    }
-
-    $onlyEntraDevicesFile | ConvertTo-Json -Depth 10 | Out-File -FilePath $onlyEntraDevicesPath -Encoding UTF8
-
-    # =====================================================
-    # PROBABLE PERSONAL DEVICE REPORT
-    # =====================================================
-    $probablePersonalDevices = $ConsolidatedDevices | Where-Object {
-        $_.issues -contains "probable_private_byod_not_registered_in_entra"
-    }
-
-    $probablePersonalDevicesPath = Join-Path $ReportsPath "probable_personal_devices_$date.json"
-
-    $probablePersonalDevicesFile = [PSCustomObject]@{
-        generated_at  = $date
-        total_devices = $probablePersonalDevices.Count
-        summary       = [PSCustomObject]@{
-            total_devices             = $probablePersonalDevices.Count
-            recent_activity_devices   = @($probablePersonalDevices | Where-Object { $_.recent_activity -eq $true }).Count
-            inactive_devices_30d_plus = @($probablePersonalDevices | Where-Object {
-                $null -ne $_.days_since_last_connection -and $_.days_since_last_connection -gt 30
-            }).Count
-            duplicate_hostnames       = @($probablePersonalDevices | Where-Object { $_.duplicate_hostname -eq $true }).Count
-        }
-        records       = $probablePersonalDevices
-    }
-
-    $probablePersonalDevicesFile | ConvertTo-Json -Depth 10 | Out-File -FilePath $probablePersonalDevicesPath -Encoding UTF8
-
-    # =====================================================
-    # ENRICHED INTUNE EXPORT
-    # =====================================================
-    $sortedCleanExport = $CleanExport | Sort-Object @{
-        Expression = {
-            switch ($_.COMPLIANCE) {
-                "noncompliant" { 0 }
-                "inGracePeriod" { 1 }
-                "configManager" { 2 }
-                default { 3 }
+        "warning" {
+            if ($issues -contains "defender_visibility_gap") {
+                return "Check why this device is visible in one security source but not consistently represented in Defender."
             }
+
+            if ($issues -contains "probable_private_byod") {
+                return "Validate whether this is an expected BYOD case and whether policy coverage is sufficient."
+            }
+
+            return "Review the device during normal operational follow-up and confirm whether the identified gaps are expected."
+        }
+
+        default {
+            return "No urgent action required. Keep this device under standard monitoring."
         }
     }
+}
 
-    $intuneExportPath = Join-Path $ProcessedDataPath "Intune_ManagedDevices_Enriched_$date.csv"
-    $sortedCleanExport | Export-Csv -Path $intuneExportPath -NoTypeInformation -Delimiter ";"
+function Get-RiskScoreResult {
+    param (
+        [Parameter(Mandatory)]
+        $Device
+    )
 
-    Write-Host "[OK] Reports exported" -ForegroundColor Green
+    $score = 0
+    $riskTags = New-Object System.Collections.Generic.List[string]
+    $issues = @($Device.issues)
+
+    if ($Device.has_defender_alert) {
+        $score += 45
+        Add-RiskTag -Tags $riskTags -Tag "defender_alert_present"
+    }
+
+    if ($Device.has_missing_kbs) {
+        $score += 20
+        Add-RiskTag -Tags $riskTags -Tag "missing_security_updates"
+    }
+
+    if ($Device.has_missing_kbs -and $Device.defender_machine_active) {
+        $score += 15
+        Add-RiskTag -Tags $riskTags -Tag "active_unpatched_device"
+    }
+
+    if ($issues -contains "device_noncompliant") {
+        $score += 25
+        Add-RiskTag -Tags $riskTags -Tag "device_noncompliant"
+    }
+
+    if (($issues -contains "device_noncompliant") -and $Device.has_defender_alert) {
+        $score += 20
+        Add-RiskTag -Tags $riskTags -Tag "noncompliant_with_security_alert"
+    }
+
+    if ($issues -contains "registered_not_managed") {
+        $score += 15
+        Add-RiskTag -Tags $riskTags -Tag "registered_not_managed"
+    }
+
+    if ($issues -contains "probable_private_byod") {
+        $score += 12
+        Add-RiskTag -Tags $riskTags -Tag "probable_private_byod"
+    }
+
+    if ($issues -contains "defender_visibility_gap") {
+        $score += 10
+        Add-RiskTag -Tags $riskTags -Tag "defender_visibility_gap"
+    }
+
+    if ($issues -contains "missing_in_defender") {
+        $score += 8
+        Add-RiskTag -Tags $riskTags -Tag "missing_in_defender"
+    }
+
+    if ($issues -contains "missing_in_intune") {
+        $score += 12
+        Add-RiskTag -Tags $riskTags -Tag "missing_in_intune"
+    }
+
+    if ($issues -contains "missing_in_entra") {
+        $score += 10
+        Add-RiskTag -Tags $riskTags -Tag "missing_in_entra"
+    }
+
+    if ($issues -contains "missing_in_trend") {
+        $score += 8
+        Add-RiskTag -Tags $riskTags -Tag "missing_in_trend"
+    }
+
+    if ($issues -contains "inactive_defender_device") {
+        $score += 10
+        Add-RiskTag -Tags $riskTags -Tag "inactive_defender_device"
+    }
+
+    if ($issues -contains "duplicate_hostname") {
+        $score += 10
+        Add-RiskTag -Tags $riskTags -Tag "duplicate_hostname"
+    }
+
+    if ([int]$Device.missing_kb_count -ge 5) {
+        $score += 10
+        Add-RiskTag -Tags $riskTags -Tag "multiple_missing_kbs"
+    }
+
+    if ($Device.match_status -eq "single_source_only") {
+        $score += 10
+        Add-RiskTag -Tags $riskTags -Tag "single_source_visibility"
+    }
+
+    if ($Device.match_status -eq "partial_match_two_sources") {
+        $score += 5
+        Add-RiskTag -Tags $riskTags -Tag "partial_visibility"
+    }
+
+    if ($Device.source_presence.defender -and -not $Device.source_presence.intune) {
+        $score += 8
+        Add-RiskTag -Tags $riskTags -Tag "security_visibility_without_management"
+    }
+
+    if ($Device.source_presence.trend -and -not $Device.source_presence.defender) {
+        $score += 6
+        Add-RiskTag -Tags $riskTags -Tag "trend_without_defender_visibility"
+    }
+
+    if ($score -gt 100) {
+        $score = 100
+    }
+
+    $riskLevel = Get-RiskLevelFromScore -Score $score
+    $visualTag = Get-VisualTagFromRiskLevel -RiskLevel $riskLevel
+    $recommendedAction = Get-RecommendedAction -Device $Device -RiskLevel $riskLevel
 
     return [PSCustomObject]@{
-        FullJsonDataset         = $fullJsonDataset
-        FullJsonPath            = $fullJsonPath
-        FullJsonStablePath      = $fullJsonStablePath
-        HelpdeskCases           = $helpdeskCases
-        HelpDeskReportPathCsv   = $helpDeskReportPathCsv
-        HelpDeskReportPathJson  = $helpDeskReportPathJson
-        IntuneExportPath        = $intuneExportPath
-        EntraOnlyReportPath     = $onlyEntraDevicesPath
-        ProbablePrivateByodPath = $probablePersonalDevicesPath
+        risk_score         = $score
+        risk_level         = $riskLevel
+        visual_tag         = $visualTag
+        risk_tags          = @($riskTags)
+        recommended_action = $recommendedAction
     }
+}
+
+function Merge-RiskDataIntoDevice {
+    param (
+        [Parameter(Mandatory)]
+        $Device,
+
+        [Parameter(Mandatory)]
+        $RiskData
+    )
+
+    return [PSCustomObject]@{
+        device_name                = $Device.device_name
+        primary_user               = $Device.primary_user
+        aad_device_id              = $Device.aad_device_id
+        device_os                  = $Device.device_os
+        device_os_version          = $Device.device_os_version
+
+        has_trend                  = $Device.has_trend
+        has_entra                  = $Device.has_entra
+        has_intune                 = $Device.has_intune
+        has_defender_alert         = $Device.has_defender_alert
+        has_defender_machine       = $Device.has_defender_machine
+        has_defender_hunting       = $Device.has_defender_hunting
+        has_missing_kbs            = $Device.has_missing_kbs
+
+        source_presence            = $Device.source_presence
+        match_status               = $Device.match_status
+        defender_visibility_status = $Device.defender_visibility_status
+
+        intune_compliance_state    = $Device.intune_compliance_state
+        entra_trust_type           = $Device.entra_trust_type
+        defender_onboarding_status = $Device.defender_onboarding_status
+        defender_machine_active    = $Device.defender_machine_active
+
+        missing_kb_count           = $Device.missing_kb_count
+        missing_kb_ids             = $Device.missing_kb_ids
+        missing_kb_names           = $Device.missing_kb_names
+
+        duplicate_hostname         = $Device.duplicate_hostname
+        duplicate_hostname_count   = $Device.duplicate_hostname_count
+
+        issues                     = $Device.issues
+        risk_tags                  = $RiskData.risk_tags
+        risk_score                 = $RiskData.risk_score
+        risk_level                 = $RiskData.risk_level
+        visual_tag                 = $RiskData.visual_tag
+        recommended_action         = $RiskData.recommended_action
+
+        trend_data                 = $Device.trend_data
+        entra_data                 = $Device.entra_data
+        intune_data                = $Device.intune_data
+        defender_alerts            = $Device.defender_alerts
+        defender_machines          = $Device.defender_machines
+        defender_hunting           = $Device.defender_hunting
+        defender_missing_kbs       = $Device.defender_missing_kbs
+    }
+}
+
+function Invoke-RiskEngine {
+    param (
+        [Parameter(Mandatory)]
+        [array]$Devices
+    )
+
+    Write-Log "Running risk engine..."
+
+    $scoredDevices = New-Object System.Collections.Generic.List[object]
+
+    foreach ($device in $Devices) {
+        $riskData = Get-RiskScoreResult -Device $device
+        $scoredDevice = Merge-RiskDataIntoDevice -Device $device -RiskData $riskData
+        [void]$scoredDevices.Add($scoredDevice)
+    }
+
+    $sortedDevices = @(
+        $scoredDevices |
+        Sort-Object -Property @{ Expression = "risk_score"; Descending = $true }, @{ Expression = "device_name"; Descending = $false }
+    )
+
+    Write-Log "Risk engine completed: $($sortedDevices.Count) devices scored" "SUCCESS"
+    return $sortedDevices
 }
