@@ -1,0 +1,20 @@
+[
+  {
+    "id": "alert-001",
+    "title": "Suspicious PowerShell Activity",
+    "severity": "High",
+    "status": "Active",
+    "category": "Execution",
+    "serviceSource": "Microsoft Defender",
+    "deviceName": "LAPTOP-CEO"
+  },
+  {
+    "id": "alert-002",
+    "title": "Credential Dumping Attempt",
+    "severity": "Medium",
+    "status": "Active",
+    "category": "CredentialAccess",
+    "serviceSource": "Microsoft Defender",
+    "deviceName": "LAPTOP-IT"
+  }
+]
