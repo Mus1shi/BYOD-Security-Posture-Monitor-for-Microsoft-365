@@ -1,0 +1,23 @@
+[
+  {
+    "azureADDeviceId": "entra-001",
+    "deviceName": "LAPTOP-CEO",
+    "operatingSystem": "Windows",
+    "osVersion": "11",
+    "complianceState": "compliant"
+  },
+  {
+    "azureADDeviceId": "entra-002",
+    "deviceName": "BYOD-JOHN",
+    "operatingSystem": "Windows",
+    "osVersion": "10",
+    "complianceState": "noncompliant"
+  },
+  {
+    "azureADDeviceId": "entra-003",
+    "deviceName": "LAPTOP-IT",
+    "operatingSystem": "Windows",
+    "osVersion": "11",
+    "complianceState": "compliant"
+  }
+]

@@ -1,0 +1,23 @@
+[
+  {
+    "deviceId": "entra-001",
+    "displayName": "LAPTOP-CEO",
+    "operatingSystem": "Windows",
+    "operatingSystemVersion": "11",
+    "trustType": "AzureAD"
+  },
+  {
+    "deviceId": "entra-002",
+    "displayName": "BYOD-JOHN",
+    "operatingSystem": "Windows",
+    "operatingSystemVersion": "10",
+    "trustType": "Workplace"
+  },
+  {
+    "deviceId": "entra-003",
+    "displayName": "LAPTOP-IT",
+    "operatingSystem": "Windows",
+    "operatingSystemVersion": "11",
+    "trustType": "AzureAD"
+  }
+]
