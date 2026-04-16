@@ -1,0 +1,20 @@
+[
+  {
+    "id": "machine-001",
+    "computerDnsName": "LAPTOP-CEO",
+    "onboardingStatus": "Onboarded",
+    "healthStatus": "Active",
+    "riskLevel": "Medium",
+    "osPlatform": "Windows",
+    "isActive": true
+  },
+  {
+    "id": "machine-002",
+    "computerDnsName": "LAPTOP-IT",
+    "onboardingStatus": "Onboarded",
+    "healthStatus": "Active",
+    "riskLevel": "Low",
+    "osPlatform": "Windows",
+    "isActive": true
+  }
+]
