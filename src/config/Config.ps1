@@ -3,89 +3,81 @@
 # =====================================================
 
 # ---------------------------
-# PROJECT PATHS
+# PATHS
 # ---------------------------
 
-$ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-$ProjectRoot = Split-Path -Parent $ScriptRoot
+$ConfigRoot  = Split-Path -Parent $MyInvocation.MyCommand.Path
+$SrcRoot     = Split-Path -Parent $ConfigRoot
+$ProjectRoot = Split-Path -Parent $SrcRoot
 
 $DataRoot       = Join-Path $ProjectRoot "data"
+$SampleDataPath = Join-Path $DataRoot "sample"
 $RawDataPath    = Join-Path $DataRoot "raw"
 $ProcessedPath  = Join-Path $DataRoot "processed"
 $ReportsPath    = Join-Path $DataRoot "reports"
-$SampleDataPath = Join-Path $DataRoot "sample"
+$FrontendPath   = Join-Path $ReportsPath "frontend"
 
-# Frontend export (React will consume this)
-$FrontendDataPath = Join-Path $ReportsPath "frontend"
+# ---------------------------
+# PROJECT IDENTITY
+# ---------------------------
+
+$ProjectName = "Security Device Monitor"
+$ReportName  = "Security Device Monitor Report (Public Demo)"
 
 # ---------------------------
 # EXECUTION MODES
 # ---------------------------
 
-# Public demo mode (SAFE)
-$DemoMode = $true
+$DemoMode             = $true
+$EnableDemoData       = $true
+$EnableFrontendExport = $true
+$EnableMail           = $false
 
-# Live collection flags (disabled in public repo)
-$EnableGraphCollection    = $false
-$EnableTrendCollection    = $false
-$EnableDefenderLive       = $false
+# Live collection is intentionally disabled in the public repository
+$EnableGraphCollection = $false
+$EnableTrendCollection = $false
+$EnableDefenderLive    = $false
 
-# Demo data usage
-$EnableDemoData           = $true
-$EnableDefenderDemo       = $true
-
-# Output options
-$EnableMail               = $false
-$EnableFrontendExport     = $true
+# Public Defender demo visibility
+$EnableDefenderDemo = $true
 
 # ---------------------------
-# SAMPLE DATA FILES
+# SAMPLE INPUT FILES
 # ---------------------------
 
-# Entra / Intune / Trend
 $SampleEntraDevicesFile  = Join-Path $SampleDataPath "entra_devices_demo.json"
 $SampleIntuneDevicesFile = Join-Path $SampleDataPath "intune_devices_demo.json"
 $SampleTrendDevicesFile  = Join-Path $SampleDataPath "trend_devices_demo.json"
 
-# Defender demo files
 $SampleDefenderAlertsFile     = Join-Path $SampleDataPath "defender_alerts_demo.json"
 $SampleDefenderMachinesFile   = Join-Path $SampleDataPath "defender_machines_demo.json"
 $SampleDefenderHuntingFile    = Join-Path $SampleDataPath "defender_hunting_demo.json"
 $SampleDefenderMissingKbsFile = Join-Path $SampleDataPath "defender_missing_kbs_demo.json"
 
 # ---------------------------
-# OUTPUT FILES
+# REPORT OUTPUT FILES
 # ---------------------------
 
-$Timestamp = Get-Date -Format "yyyyMMdd-HHmm"
+$RunTimestamp = Get-Date -Format "yyyyMMdd-HHmm"
 
-# Full report
-$FullReportFile = Join-Path $ReportsPath "security_device_full_report_$Timestamp.json"
-$FullReportStable = Join-Path $ReportsPath "security_device_full_report_demo.json"
+$FullReportTimestampedPath = Join-Path $ReportsPath "security_device_full_report_$RunTimestamp.json"
+$FullReportStablePath      = Join-Path $ReportsPath "security_device_full_report_demo.json"
 
-# Summary report
-$SummaryReportFile = Join-Path $ReportsPath "security_device_summary_$Timestamp.json"
-$SummaryReportStable = Join-Path $ReportsPath "security_device_summary_demo.json"
+$SummaryReportTimestampedPath = Join-Path $ReportsPath "security_device_summary_$RunTimestamp.json"
+$SummaryReportStablePath      = Join-Path $ReportsPath "security_device_summary_demo.json"
 
-# Frontend exports
-$FrontendFullReport   = Join-Path $FrontendDataPath "security_device_full_report.json"
-$FrontendSummary     = Join-Path $FrontendDataPath "security_device_summary.json"
+$FrontendFullReportPath    = Join-Path $FrontendPath "security_device_full_report.json"
+$FrontendSummaryReportPath = Join-Path $FrontendPath "security_device_summary.json"
 
 # ---------------------------
-# PROJECT NAME
+# RISK SCORING THRESHOLDS
 # ---------------------------
 
-$ReportName = "Security Device Monitor Report (Public Demo)"
-
-# ---------------------------
-# RISK LEVEL CONFIG
-# ---------------------------
-
-$RiskLevels = @{
+$RiskThresholds = @{
     Critical = 90
     High     = 70
-    Medium   = 40
-    Low      = 10
+    Warning  = 40
+    Normal   = 0
 }
 
 # ---------------------------
@@ -96,32 +88,57 @@ $EnableVerboseLogging = $true
 
 function Write-Log {
     param (
+        [Parameter(Mandatory)]
         [string]$Message,
+
+        [ValidateSet("INFO", "WARN", "ERROR", "SUCCESS")]
         [string]$Level = "INFO"
     )
 
-    $timestamp = Get-Date -Format "HH:mm:ss"
-    Write-Host "[$timestamp][$Level] $Message"
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    Write-Host "[$timestamp] [$Level] $Message"
 }
 
 # ---------------------------
-# FOLDER INITIALIZATION
+# FILESYSTEM HELPERS
 # ---------------------------
 
-$Folders = @(
+function Ensure-Directory {
+    param (
+        [Parameter(Mandatory)]
+        [string]$Path
+    )
+
+    if (-not (Test-Path -Path $Path)) {
+        New-Item -Path $Path -ItemType Directory -Force | Out-Null
+        Write-Log "Created directory: $Path"
+    }
+}
+
+function Test-RequiredFile {
+    param (
+        [Parameter(Mandatory)]
+        [string]$Path
+    )
+
+    if (-not (Test-Path -Path $Path)) {
+        throw "Required file not found: $Path"
+    }
+}
+
+# ---------------------------
+# INITIALIZE DIRECTORIES
+# ---------------------------
+
+@(
     $DataRoot,
+    $SampleDataPath,
     $RawDataPath,
     $ProcessedPath,
     $ReportsPath,
-    $SampleDataPath,
-    $FrontendDataPath
-)
-
-foreach ($folder in $Folders) {
-    if (-not (Test-Path $folder)) {
-        New-Item -ItemType Directory -Path $folder -Force | Out-Null
-        Write-Log "Created folder: $folder"
-    }
+    $FrontendPath
+) | ForEach-Object {
+    Ensure-Directory -Path $_
 }
 
 # ---------------------------
@@ -129,11 +146,36 @@ foreach ($folder in $Folders) {
 # ---------------------------
 
 if ($DemoMode -and -not $EnableDemoData) {
-    throw "DemoMode is enabled but EnableDemoData is disabled."
+    throw "Invalid configuration: DemoMode is enabled but EnableDemoData is disabled."
 }
 
-if ($EnableDefenderDemo) {
-    Write-Log "Defender demo mode enabled"
+if ($EnableDefenderLive -and $EnableDefenderDemo) {
+    throw "Invalid configuration: public configuration must not enable Defender live mode and Defender demo mode at the same time."
 }
 
-Write-Log "Configuration loaded successfully"
+if ($EnableDemoData) {
+    @(
+        $SampleEntraDevicesFile,
+        $SampleIntuneDevicesFile,
+        $SampleTrendDevicesFile
+    ) | ForEach-Object {
+        Test-RequiredFile -Path $_
+    }
+
+    if ($EnableDefenderDemo) {
+        @(
+            $SampleDefenderAlertsFile,
+            $SampleDefenderMachinesFile,
+            $SampleDefenderHuntingFile,
+            $SampleDefenderMissingKbsFile
+        ) | ForEach-Object {
+            Test-RequiredFile -Path $_
+        }
+    }
+}
+
+Write-Log "Configuration loaded successfully" "SUCCESS"
+Write-Log "Project root: $ProjectRoot"
+Write-Log "Demo mode: $DemoMode"
+Write-Log "Defender demo enabled: $EnableDefenderDemo"
+Write-Log "Frontend export enabled: $EnableFrontendExport"

@@ -1,141 +1,181 @@
 # =====================================================
-# MAIN - SECURITY DEVICE MONITOR (PUBLIC DEMO)
+# CONFIGURATION - SECURITY DEVICE MONITOR (PUBLIC DEMO)
 # =====================================================
 
 # ---------------------------
-# LOAD CONFIG
+# PATHS
 # ---------------------------
 
-. "$PSScriptRoot\config\Config.ps1"
+$ConfigRoot  = Split-Path -Parent $MyInvocation.MyCommand.Path
+$SrcRoot     = Split-Path -Parent $ConfigRoot
+$ProjectRoot = Split-Path -Parent $SrcRoot
 
-Write-Log "Starting Security Device Monitor..."
-
-# ---------------------------
-# LOAD MODULES
-# ---------------------------
-
-. "$PSScriptRoot\core\EntraCollect.ps1"
-. "$PSScriptRoot\core\IntuneCollect.ps1"
-. "$PSScriptRoot\core\TrendCollect.ps1"
-. "$PSScriptRoot\core\DefenderCollect.ps1"
-
-. "$PSScriptRoot\processing\Correlation.ps1"
-. "$PSScriptRoot\processing\RiskEngine.ps1"
-
-. "$PSScriptRoot\output\Reports.ps1"
-. "$PSScriptRoot\output\Mail.ps1"
+$DataRoot       = Join-Path $ProjectRoot "data"
+$SampleDataPath = Join-Path $DataRoot "sample"
+$RawDataPath    = Join-Path $DataRoot "raw"
+$ProcessedPath  = Join-Path $DataRoot "processed"
+$ReportsPath    = Join-Path $DataRoot "reports"
+$FrontendPath   = Join-Path $ReportsPath "frontend"
 
 # ---------------------------
-# STEP 1 - LOAD DATA
+# PROJECT IDENTITY
 # ---------------------------
 
-Write-Log "Loading data sources..."
+$ProjectName = "Security Device Monitor"
+$ReportName  = "Security Device Monitor Report (Public Demo)"
 
-if ($DemoMode -and $EnableDemoData) {
+# ---------------------------
+# EXECUTION MODES
+# ---------------------------
 
-    Write-Log "Using DEMO data"
+$DemoMode             = $true
+$EnableDemoData       = $true
+$EnableFrontendExport = $true
+$EnableMail           = $false
 
-    $EntraDevices  = Get-Content $SampleEntraDevicesFile  | ConvertFrom-Json
-    $IntuneDevices = Get-Content $SampleIntuneDevicesFile | ConvertFrom-Json
-    $TrendDevices  = Get-Content $SampleTrendDevicesFile  | ConvertFrom-Json
+# Live collection is intentionally disabled in the public repository
+$EnableGraphCollection = $false
+$EnableTrendCollection = $false
+$EnableDefenderLive    = $false
 
-} else {
+# Public Defender demo visibility
+$EnableDefenderDemo = $true
 
-    Write-Log "Live collection not enabled in public version" "WARN"
-    $EntraDevices  = @()
-    $IntuneDevices = @()
-    $TrendDevices  = @()
+# ---------------------------
+# SAMPLE INPUT FILES
+# ---------------------------
+
+$SampleEntraDevicesFile  = Join-Path $SampleDataPath "entra_devices_demo.json"
+$SampleIntuneDevicesFile = Join-Path $SampleDataPath "intune_devices_demo.json"
+$SampleTrendDevicesFile  = Join-Path $SampleDataPath "trend_devices_demo.json"
+
+$SampleDefenderAlertsFile     = Join-Path $SampleDataPath "defender_alerts_demo.json"
+$SampleDefenderMachinesFile   = Join-Path $SampleDataPath "defender_machines_demo.json"
+$SampleDefenderHuntingFile    = Join-Path $SampleDataPath "defender_hunting_demo.json"
+$SampleDefenderMissingKbsFile = Join-Path $SampleDataPath "defender_missing_kbs_demo.json"
+
+# ---------------------------
+# REPORT OUTPUT FILES
+# ---------------------------
+
+$RunTimestamp = Get-Date -Format "yyyyMMdd-HHmm"
+
+$FullReportTimestampedPath = Join-Path $ReportsPath "security_device_full_report_$RunTimestamp.json"
+$FullReportStablePath      = Join-Path $ReportsPath "security_device_full_report_demo.json"
+
+$SummaryReportTimestampedPath = Join-Path $ReportsPath "security_device_summary_$RunTimestamp.json"
+$SummaryReportStablePath      = Join-Path $ReportsPath "security_device_summary_demo.json"
+
+$FrontendFullReportPath    = Join-Path $FrontendPath "security_device_full_report.json"
+$FrontendSummaryReportPath = Join-Path $FrontendPath "security_device_summary.json"
+
+# ---------------------------
+# RISK SCORING THRESHOLDS
+# ---------------------------
+
+$RiskThresholds = @{
+    Critical = 90
+    High     = 70
+    Warning  = 40
+    Normal   = 0
 }
 
 # ---------------------------
-# STEP 2 - LOAD DEFENDER
+# LOGGING
 # ---------------------------
 
-Write-Log "Loading Defender data..."
+$EnableVerboseLogging = $true
 
-if ($EnableDefenderDemo) {
+function Write-Log {
+    param (
+        [Parameter(Mandatory)]
+        [string]$Message,
 
-    $DefenderData = Get-DefenderDemoData `
-        -AlertsFile     $SampleDefenderAlertsFile `
-        -MachinesFile   $SampleDefenderMachinesFile `
-        -HuntingFile    $SampleDefenderHuntingFile `
-        -MissingKbsFile $SampleDefenderMissingKbsFile
+        [ValidateSet("INFO", "WARN", "ERROR", "SUCCESS")]
+        [string]$Level = "INFO"
+    )
 
-} else {
-
-    Write-Log "Defender disabled" "WARN"
-    $DefenderData = $null
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    Write-Host "[$timestamp] [$Level] $Message"
 }
 
 # ---------------------------
-# STEP 3 - CORRELATION
+# FILESYSTEM HELPERS
 # ---------------------------
 
-Write-Log "Running correlation engine..."
+function Ensure-Directory {
+    param (
+        [Parameter(Mandatory)]
+        [string]$Path
+    )
 
-$CorrelatedDevices = Invoke-Correlation `
-    -EntraDevices  $EntraDevices `
-    -IntuneDevices $IntuneDevices `
-    -TrendDevices  $TrendDevices `
-    -DefenderData  $DefenderData
+    if (-not (Test-Path -Path $Path)) {
+        New-Item -Path $Path -ItemType Directory -Force | Out-Null
+        Write-Log "Created directory: $Path"
+    }
+}
 
-# ---------------------------
-# STEP 4 - RISK ENGINE
-# ---------------------------
+function Test-RequiredFile {
+    param (
+        [Parameter(Mandatory)]
+        [string]$Path
+    )
 
-Write-Log "Running risk engine..."
-
-$RiskDevices = Invoke-RiskEngine -Devices $CorrelatedDevices
-
-# ---------------------------
-# STEP 5 - REPORTS
-# ---------------------------
-
-Write-Log "Generating reports..."
-
-$Reports = Export-Reports `
-    -Devices $RiskDevices `
-    -FullReportFile $FullReportFile `
-    -FullReportStable $FullReportStable `
-    -SummaryReportFile $SummaryReportFile `
-    -SummaryReportStable $SummaryReportStable `
-    -ReportName $ReportName
+    if (-not (Test-Path -Path $Path)) {
+        throw "Required file not found: $Path"
+    }
+}
 
 # ---------------------------
-# STEP 6 - FRONTEND EXPORT
+# INITIALIZE DIRECTORIES
 # ---------------------------
 
-if ($EnableFrontendExport) {
+@(
+    $DataRoot,
+    $SampleDataPath,
+    $RawDataPath,
+    $ProcessedPath,
+    $ReportsPath,
+    $FrontendPath
+) | ForEach-Object {
+    Ensure-Directory -Path $_
+}
 
-    Write-Log "Exporting frontend data..."
+# ---------------------------
+# VALIDATION
+# ---------------------------
 
-    if (-not (Test-Path $FrontendDataPath)) {
-        New-Item -ItemType Directory -Path $FrontendDataPath | Out-Null
+if ($DemoMode -and -not $EnableDemoData) {
+    throw "Invalid configuration: DemoMode is enabled but EnableDemoData is disabled."
+}
+
+if ($EnableDefenderLive -and $EnableDefenderDemo) {
+    throw "Invalid configuration: public configuration must not enable Defender live mode and Defender demo mode at the same time."
+}
+
+if ($EnableDemoData) {
+    @(
+        $SampleEntraDevicesFile,
+        $SampleIntuneDevicesFile,
+        $SampleTrendDevicesFile
+    ) | ForEach-Object {
+        Test-RequiredFile -Path $_
     }
 
-    $Reports.Full | ConvertTo-Json -Depth 10 | Out-File $FrontendFullReport -Encoding UTF8
-    $Reports.Summary | ConvertTo-Json -Depth 10 | Out-File $FrontendSummary -Encoding UTF8
-
-    Write-Log "Frontend data exported"
+    if ($EnableDefenderDemo) {
+        @(
+            $SampleDefenderAlertsFile,
+            $SampleDefenderMachinesFile,
+            $SampleDefenderHuntingFile,
+            $SampleDefenderMissingKbsFile
+        ) | ForEach-Object {
+            Test-RequiredFile -Path $_
+        }
+    }
 }
 
-# ---------------------------
-# STEP 7 - MAIL (DISABLED BY DEFAULT)
-# ---------------------------
-
-if ($EnableMail) {
-
-    Write-Log "Sending report by mail..."
-
-    Send-ReportMail `
-        -Summary $Reports.Summary `
-        -FullReportPath $FullReportStable
-}
-
-# ---------------------------
-# FINAL LOG
-# ---------------------------
-
-Write-Log "Execution completed successfully"
-Write-Log "Full report: $FullReportStable"
-Write-Log "Summary report: $SummaryReportStable"
+Write-Log "Configuration loaded successfully" "SUCCESS"
+Write-Log "Project root: $ProjectRoot"
+Write-Log "Demo mode: $DemoMode"
+Write-Log "Defender demo enabled: $EnableDefenderDemo"
+Write-Log "Frontend export enabled: $EnableFrontendExport"
