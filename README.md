@@ -1,250 +1,554 @@
-# Device Security Posture Monitor for Microsoft 365
+# Security Device Monitor for Microsoft 365
 
-PowerShell prototype designed to correlate device visibility across multiple security and management sources in a Microsoft 365 environment.
+A modular PowerShell-based security posture monitoring and device correlation project designed for modern Microsoft 365 environments.
 
-This public version is a **sanitized demo edition** built for portfolio and technical presentation purposes.  
-It runs with **fake / sample data only** and does **not** include any production credentials, internal infrastructure details, or sensitive organizational information.
-
----
+This public repository demonstrates how to collect, normalize, correlate, score, and report device security data across multiple sources in a clean and maintainable way.
 
 ## Project Purpose
 
-The goal of this project is to build a **consolidated device view** by combining signals from:
+The goal of this project is to provide a unified security-oriented view of devices by correlating multiple sources instead of relying on a single tool.
 
-- Trend Vision One
-- Microsoft Entra ID
-- Microsoft Intune
+The project is built around a practical idea:
 
-The objective is to help identify:
+- a device may exist in one source and be missing in another
+- a device may be compliant in one tool but still risky overall
+- a security team needs one operational view, not four disconnected consoles
 
-- devices visible in one source but missing in another
-- unmanaged or partially managed devices
-- noncompliant devices
-- probable personal devices (BYOD-like behavior)
-- inactive devices
-- visibility gaps across security sources
+This repository shows how PowerShell can be used to:
 
-This project is designed with an operational mindset:  
-not just collecting data, but turning it into **actionable outputs** for security or helpdesk teams.
+- collect device data from several platforms
+- normalize and correlate records
+- enrich devices with security visibility indicators
+- apply a pragmatic risk scoring model
+- export results for reporting, investigations, and dashboards
 
 ---
 
-## Public Demo Scope
+## Public Repository Scope
 
-This repository is a **public demonstration version** of the project.
+This is the **public demonstration version** of the project.
 
-It is intended to show:
+It is intentionally designed to be:
 
-- project architecture
-- PowerShell scripting structure
-- multi-source collection logic
-- correlation logic
-- risk classification
-- reporting design
+- safe to share
+- portfolio-friendly
+- understandable by recruiters and technical reviewers
+- free from sensitive tenant information
 
-This version uses:
+### Important
 
-- **sample / fake datasets**
-- **sanitized configuration**
-- **non-production paths and placeholders**
+This public version uses **sanitized demo/sample datasets**.
 
-It does **not** expose:
+That means:
 
-- real tenant information
-- real credentials
-- internal SMTP configuration
-- private infrastructure details
-- organizational data
+- no real tenant IDs
+- no production secrets
+- no customer data
+- no internal infrastructure details
+- no real usernames, emails, hostnames, or report recipients
+
+The architecture, logic, naming, data flow, and reporting approach reflect the real project design, but the exposed data is intentionally safe for public publication.
 
 ---
 
-## Current Features
+## Core Value of the Project
 
-- Modular PowerShell architecture
-- Microsoft Graph authentication structure
-- Entra ID device inventory collection
-- Intune managed device inventory collection
-- Trend Vision One endpoint loading / collection flow
-- Cross-source device correlation
-- Consolidated device object generation
-- Risk engine with issue tagging
-- Helpdesk-oriented CSV / JSON reporting
-- Full JSON export for dashboard / UI usage
-- Detection of:
-  - unmatched devices
-  - partial matches
-  - noncompliant devices
-  - probable personal devices
-  - inactive devices
-  - source visibility gaps
-  - duplicate hostnames
+This project is not just an inventory script.
 
----
+Its real value is:
 
-## Detection Logic Overview
+- **multi-source correlation**
+- **security posture visibility**
+- **risk prioritization**
+- **operational reporting**
+- **dashboard-ready exports**
 
-The monitoring logic currently focuses on practical cases such as:
+Instead of showing isolated lists of devices, the project builds a unified device view from multiple sources and highlights:
 
-- **Trend only** device  
-  Device seen in endpoint security but not found in Entra ID
-
-- **Trend + Entra, but not Intune**  
-  Device exists in identity but is not managed
-
-- **Noncompliant Intune device**  
-  Device is managed but not compliant
-
-- **Workplace / personal device registration**  
-  Device appears as Entra `Workplace`
-
-- **Probable personal device not registered in Entra**  
-  Device looks like a personal endpoint based on multiple signals
-
-- **Inactive device**  
-  No recent activity observed across available sources
-
-- **Source visibility gap**  
-  Device is not consistently visible across security and management layers
+- missing visibility
+- compliance issues
+- patching gaps
+- security alerts
+- probable BYOD situations
+- unmanaged or inconsistent assets
 
 ---
 
-## Project Structure
+## Public Demo Data Sources
 
-Device-Security-Posture-Monitor/
+The public version demonstrates a unified correlation model using the following sources:
+
+- **Microsoft Entra ID**
+- **Microsoft Intune**
+- **Trend Vision One**
+- **Microsoft Defender**
+
+Each source contributes a different angle of visibility.
+
+### Entra ID
+Used for identity-linked device registration and trust information.
+
+Examples:
+- registered device presence
+- trust type
+- operating system
+- sign-in visibility
+- account enabled state
+
+### Intune
+Used for management, compliance, and device administration signals.
+
+Examples:
+- compliance state
+- enrolled date
+- last sync
+- managed owner type
+- Azure AD device linkage
+
+### Trend Vision One
+Used for endpoint security visibility and endpoint presence.
+
+Examples:
+- endpoint presence
+- endpoint metadata
+- endpoint platform visibility
+
+### Microsoft Defender
+Used in the public demo as a security enrichment source.
+
+Examples:
+- alert presence
+- machine visibility
+- hunting visibility
+- missing KB visibility
+- additional device-level security context
+
+---
+
+## Public Defender Scope
+
+The public repository includes a **sanitized Defender demonstration model**.
+
+The goal is to show how Defender can enrich a unified device posture view without exposing private tenant information.
+
+### Public Defender fields exposed in demo reports
+
+The public JSON outputs may include fields such as:
+
+- `has_defender_alert`
+- `has_defender_machine`
+- `has_defender_hunting`
+- `has_missing_kbs`
+- `missing_kb_count`
+- `missing_kb_ids`
+- `missing_kb_names`
+- `defender_visibility_status`
+
+These fields are intentionally limited to portfolio-safe values.
+
+### Why this matters
+
+Defender is not presented here as an isolated source.
+
+It is used to answer practical questions such as:
+
+- does this device appear in Defender but not in Intune?
+- does this device have security alerts?
+- is there patch visibility for this device?
+- does this device look risky when correlated with other sources?
+- are we dealing with a management gap or a visibility gap?
+
+---
+
+## Key Features
+
+### 1. Modular PowerShell architecture
+
+The project is split into clean functional layers:
+
+- configuration
+- authentication / collection
+- processing / correlation
+- risk engine
+- reporting
+- mail output
+- sample/demo tooling
+
+This keeps the code maintainable and allows future extensions without turning the project into a monolithic script.
+
+### 2. Multi-source device correlation
+
+The project correlates devices across multiple platforms and builds a unified device record.
+
+The unified output can represent:
+
+- devices present in all sources
+- devices present in only one source
+- inconsistent device records
+- devices with partial management
+- devices with security visibility but weak administrative control
+
+### 3. Risk engine
+
+The project applies a pragmatic risk scoring model to highlight the devices that deserve attention first.
+
+Examples of signals used in the model:
+
+- compliance problems
+- missing management coverage
+- Defender alert presence
+- missing KB visibility
+- probable BYOD patterns
+- duplicate hostnames
+- source inconsistency
+- stale or inactive records
+
+### 4. Structured reporting
+
+The public version exports dashboard-ready JSON and investigation-friendly outputs.
+
+Outputs are designed to support:
+
+- quick summaries
+- detailed full reports
+- UI integration
+- CSV-style operational handling
+- portfolio demonstrations
+
+### 5. Public-safe demo mode
+
+This repository is designed to run in a demo-friendly way using sample datasets.
+
+That allows the project to remain:
+
+- reproducible
+- safe to share
+- easy to demonstrate
+- suitable for GitHub portfolios
+
+---
+
+## Current Public Architecture
+
+```text
+Security-Posture-Monitor-for-Microsoft-365/
 │
+├── BYOD_Device_Monitor.ps1
+├── README.md
 ├── src/
+│   ├── Main.ps1
 │   ├── config/
+│   │   └── Config.ps1
 │   ├── core/
+│   │   ├── GraphAuth.ps1
+│   │   ├── EntraCollect.ps1
+│   │   ├── IntuneCollect.ps1
+│   │   ├── TrendCollect.ps1
+│   │   └── DefenderCollect.ps1
 │   ├── processing/
+│   │   ├── Correlation.ps1
+│   │   └── RiskEngine.ps1
 │   ├── output/
-│   ├── tools/
-│   └── Main.ps1
+│   │   ├── Reports.ps1
+│   │   └── Mail.ps1
+│   └── tools/
+│       └── Invoke-TrendCollectEndpoint.ps1
 │
 ├── data/
+│   ├── sample/
 │   ├── raw/
 │   ├── processed/
-│   ├── reports/
-│   └── sample/
+│   └── reports/
 │
-└── README.md
+└── frontend/
+    └── (future public UI / dashboard)
 
-## Main Pipeline
-Load configuration
-Authenticate to Microsoft Graph
-Collect Entra ID devices
-Collect Intune devices
-Load or collect Trend endpoints
-Correlate devices across sources
-Apply risk classification
-Export reports
-Optionally prepare notification output
-Main Outputs
-Full consolidated JSON report
+## Public Data Flow
 
-## Complete dataset for:
+The public demo pipeline follows this logic:
 
-dashboards
-automation
-analysis
-Helpdesk report
-CSV + JSON
-actionable cases only
-Entra-only report
+- load sample data from each source
+- normalize records
+- correlate devices
+- enrich with Defender visibility indicators
+- apply risk scoring
+- generate JSON reports
+- prepare data for a future frontend/dashboard
 
-Devices present in Entra but not seen in Trend
+This keeps the public version realistic while remaining safe.
 
-Probable personal device report
+---
 
-Suspected unmanaged or personal endpoints
+## Main Public Outputs
 
-Enriched Intune export
+The public version is designed around two main JSON outputs.
 
-Normalized dataset for review
+### Full report
 
-Risk Model
+**Example target file:**
+data/reports/security_device_full_report_demo.json
 
-### Each device is evaluated based on:
 
-source presence mismatch
-compliance status
-partial visibility
-personal device signals
-duplicate hostname
-inactivity
-visibility gaps
+**Purpose:**
 
-### Outputs include:
+- full unified device dataset
+- detailed fields per device
+- best source for UI consumption
+- useful for debugging and portfolio demonstration
 
-issues
-visual_tag
-recommended_action
-risk_score
-risk_level
-priority
-Sample Data
+**Typical top-level structure:**
 
-### This repository is intended to run with:
+- `report_name`
+- `generated_at`
+- `total_records`
+- `highlights`
+- `devices`
 
-fake data
-anonymized datasets
-realistic but non-sensitive structures
-Running the Demo Version
+---
+
+### Summary report
+
+**Example target file:**
+data/reports/security_device_summary_demo.json
+
+
+**Purpose:**
+
+- quick overview
+- high-level metrics
+- dashboard cards / KPI usage
+- fast recruiter-friendly reading
+
+---
+
+## Example Unified Device Fields
+
+The correlated public device model may include fields such as:
+
+- `device_name`
+- `primary_user`
+- `device_os`
+- `device_os_version`
+- `match_status`
+- `has_trend`
+- `has_entra`
+- `has_intune`
+- `has_defender_alert`
+- `has_defender_machine`
+- `has_defender_hunting`
+- `has_missing_kbs`
+- `missing_kb_count`
+- `issues`
+- `risk_score`
+- `risk_level`
+- `visual_tag`
+- `recommended_action`
+
+This makes the output directly usable by a frontend or reporting layer.
+
+---
+
+## Example Security Scenarios Demonstrated
+
+The sample datasets are designed to represent realistic operational cases, such as:
+
+- a device visible in all sources
+- a device visible in Trend but missing in Intune
+- a device registered in Entra but unmanaged
+- a device with Defender alert presence
+- a device with missing KBs
+- a probable BYOD device
+- an inactive or stale device
+- a duplicate hostname scenario
+- a partially matched device record
+
+This makes the project more valuable than a basic “device list export”.
+
+---
+
+## Why PowerShell
+
+The project is intentionally PowerShell-first.
+
+**Reasons:**
+
+- native fit for Windows and Microsoft environments
+- strong automation capabilities
+- excellent for operational scripting
+- practical for infrastructure and M365 teams
+- realistic in enterprise contexts
+- suitable for log processing, reporting, and orchestration
+
+This project is also a demonstration that PowerShell can be used for more than simple admin scripts. It can be structured into a maintainable operational monitoring tool.
+
+---
+
+## Public vs Private Version
+
+### Public version
+
+This repository:
+
+- uses sample/sanitized datasets
+- demonstrates architecture and logic
+- is portfolio-safe
+- is built for explanation and visibility
+
+### Private/internal version
+
+The private/internal project can include:
+
+- real tenant integration
+- live collection
+- stronger authentication handling
+- real report delivery
+- environment-specific tuning
+- deeper Defender collection logic
+- operational reliability improvements
+
+The public repository is meant to demonstrate the design and practical value without exposing sensitive implementation details.
+
+---
+
+## Frontend / Dashboard Direction
+
+This repository is prepared for a future modern frontend dashboard consuming the exported demo JSON.
+
+The frontend goal is not to replace the PowerShell logic.
+
+The PowerShell pipeline remains the engine.
+
+The frontend will act as:
+
+- a visual operational layer
+- a recruiter-friendly demonstration
+- a quick decision dashboard
+- a device investigation interface
+
+### Planned dashboard capabilities
+
+- KPI overview
+- unified device table
+- filters by source and risk level
+- detailed device drawer
+- issue highlighting
+- Defender visibility indicators
+- missing KB views
+- source coverage badges
+
+---
+
+## Use Cases
+
+This public project can be used to demonstrate:
+
+- PowerShell automation skills
+- modular scripting design
+- data normalization and correlation
+- risk-based reporting
+- Microsoft security ecosystem understanding
+- dashboard-oriented output design
+- portfolio-ready engineering work
+
+It is especially relevant for roles involving:
+
+- PowerShell scripting
+- M365 operations
+- endpoint visibility
+- device management
+- security reporting
+- modern workplace engineering
+- Microsoft security engineering
+- operational automation
+
+---
+
+## Recruiter / Reviewer Notes
+
+This project was designed to show practical engineering capability, not theoretical architecture slides.
+
+**What this repository demonstrates:**
+
+- real script organization
+- multi-source data thinking
+- practical reporting outputs
+- readable project structure
+- operational mindset
+- risk-oriented security reasoning
+- preparation for UI integration
+
+It is intended to show how a junior profile can build structured and useful tooling in a Microsoft security context.
+
+---
+
+## Planned Public Enhancements
+
+The following improvements are planned or prepared in the public version:
+
+- modern React frontend
+- stronger demo datasets
+- richer summary exports
+- improved source coverage visualization
+- better filtering scenarios
+- cleaner public screenshots and UI assets
+- enhanced documentation for demo mode
+
+---
+
+## How to Run the Public Demo
+
+The public version is intended to run in demo mode using sanitized sample data.
+
+**Typical flow:**
+
+- clone the repository
+- review `src/config/Config.ps1`
+- ensure demo/sample paths are present
+- run the main script
+- inspect generated JSON reports
+- consume the outputs in the future frontend
+
+### Example entry point
+
+```powershell
+.\BYOD_Device_Monitor.ps1
+or
+
 .\src\Main.ps1
 
-### Requirements:
+Depending on the final public wrapper structure.
 
-use local test data only, 
-no production credentials, 
-mail disabled or mocked, 
-Security Note
+## Important Security Note
 
-This is a sanitized public version.
+This repository does not publish:
 
-### Never include:
+credentials
+secrets
+customer data
+production identifiers
+internal SMTP values
+private tenant structure
+sensitive reporting content
 
-real credentials,
-real tenant data,
-internal infrastructure,
-production exports,
-Defender Status
+Any resemblance to real environments in the public sample data is purely illustrative.
 
-Microsoft Defender integration is currently in progress and partially present in the architecture.
+# Status
+Public repository status
 
-Roadmap
+Active and evolving.
 
-Defender enrichment
-
-KB / Windows Update visibility
-
-historical tracking
-
-dashboard / UI
-
-automation / remediation
-
-Why This Project Matters
-
-Device visibility is fragmented.
-
-### A device may exist in:
-
-endpoint security, 
-identity systems, 
-management platforms
-
-…without being consistently tracked everywhere.
-
-This project addresses that gap.
-
-Technical Positioning
-
-This is a security engineering prototype focused on:
-
-real-world visibility problems, 
-automation, 
-actionable reporting
-
+Current public direction
+strong PowerShell foundation
+multi-source unified model
+public Defender enrichment model
+dashboard-ready JSON outputs
+frontend-ready evolution path
 Author
 
-Tommy Vlassiou
-Junior Cybersecurity Analyst / Microsoft Security / PowerShell Automation
+Built as a practical PowerShell security project focused on:
+
+clean structure
+real-world usefulness
+Microsoft ecosystem relevance
+portfolio credibility
+progression toward security / automation / cloud-oriented roles
