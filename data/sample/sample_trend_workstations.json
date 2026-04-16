@@ -67,5 +67,40 @@
     "securityPolicy": "standard",
     "securityPolicyOverriddenStatus": "false",
     "lastLoggedOnUser": "private.user@contoso.com"
+  },
+  {
+    "deviceName": "LAP-CEO-01",
+    "os": "Windows 11",
+    "lastConnected": "2026-04-08T10:00:00Z",
+    "lastLoggedOnUser": "ceo@company.com",
+    "type": "laptop"
+  },
+  {
+    "deviceName": "UNKNOWN-GAMING-PC",
+    "os": "Windows 10",
+    "lastConnected": "2026-04-09T12:00:00Z",
+    "lastLoggedOnUser": "john@gmail.com",
+    "type": "desktop"
+  },
+  {
+    "deviceName": "OLD-LAP-01",
+    "os": "Windows 10",
+    "lastConnected": "2025-10-01T10:00:00Z",
+    "lastLoggedOnUser": "user@company.com",
+    "type": "laptop"
+  },
+  {
+    "deviceName": "DUPLICATE-PC",
+    "os": "Windows 11",
+    "lastConnected": "2026-04-09T10:00:00Z",
+    "lastLoggedOnUser": "user1@company.com",
+    "type": "desktop"
+  },
+  {
+    "deviceName": "DUPLICATE-PC",
+    "os": "Windows 11",
+    "lastConnected": "2026-04-09T11:00:00Z",
+    "lastLoggedOnUser": "user2@company.com",
+    "type": "desktop"
   }
 ]

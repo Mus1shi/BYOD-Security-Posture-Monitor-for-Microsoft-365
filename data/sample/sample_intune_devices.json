@@ -37,5 +37,26 @@
     "id": "intune-device-003",
     "azureADDeviceId": "entra-device-003",
     "managedDeviceOwnerType": "personal"
+  },
+  {
+    "deviceName": "LAP-CEO-01",
+    "azureADDeviceId": "entra-1",
+    "complianceState": "compliant",
+    "managedDeviceOwnerType": "company",
+    "lastSyncDateTime": "2026-04-08T10:00:00Z"
+  },
+  {
+    "deviceName": "NONCOMPLIANT-PC",
+    "azureADDeviceId": "entra-99",
+    "complianceState": "noncompliant",
+    "managedDeviceOwnerType": "company",
+    "lastSyncDateTime": "2026-04-09T10:00:00Z"
+  },
+  {
+    "deviceName": "BYOD-PHONE",
+    "azureADDeviceId": "entra-2",
+    "complianceState": "compliant",
+    "managedDeviceOwnerType": "personal",
+    "lastSyncDateTime": "2026-04-09T10:00:00Z"
   }
 ]

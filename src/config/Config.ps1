@@ -1,166 +1,139 @@
 # =====================================================
-# GLOBAL CONFIGURATION - PUBLIC DEMO VERSION
-# =====================================================
-# Purpose:
-# Central configuration file for the public demo edition
-# of the Device Security Posture Monitor project.
-#
-# This version is designed to run with:
-# - fake / sample data
-# - local demo paths
-# - no production credentials
-# - mail disabled by default
-#
-# Important:
-# Do not store any real secret, tenant ID, internal email,
-# or infrastructure detail in this file.
+# CONFIGURATION - SECURITY DEVICE MONITOR (PUBLIC DEMO)
 # =====================================================
 
-# =====================================================
-# GENERAL EXECUTION MODE
-# =====================================================
+# ---------------------------
+# PROJECT PATHS
+# ---------------------------
 
+$ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+$ProjectRoot = Split-Path -Parent $ScriptRoot
+
+$DataRoot       = Join-Path $ProjectRoot "data"
+$RawDataPath    = Join-Path $DataRoot "raw"
+$ProcessedPath  = Join-Path $DataRoot "processed"
+$ReportsPath    = Join-Path $DataRoot "reports"
+$SampleDataPath = Join-Path $DataRoot "sample"
+
+# Frontend export (React will consume this)
+$FrontendDataPath = Join-Path $ReportsPath "frontend"
+
+# ---------------------------
+# EXECUTION MODES
+# ---------------------------
+
+# Public demo mode (SAFE)
 $DemoMode = $true
-$EnableGraphCollection = $false
-$EnableTrendApiCollection = $false
-$EnableMail = $false
-$EnableDefender = $false
 
-# =====================================================
-# OPTIONAL LOCAL SECRET LOADER
-# =====================================================
-# In the public version, secret loading is optional.
-# The script can run in demo mode without any real secret.
-# If you later want to test API collection locally,
-# you can use environment variables or your own local setup.
-# =====================================================
+# Live collection flags (disabled in public repo)
+$EnableGraphCollection    = $false
+$EnableTrendCollection    = $false
+$EnableDefenderLive       = $false
 
-$LoadSecretsHelper = Join-Path $PSScriptRoot "Load-Secrets.ps1"
+# Demo data usage
+$EnableDemoData           = $true
+$EnableDefenderDemo       = $true
 
-if (Test-Path $LoadSecretsHelper) {
-    . $LoadSecretsHelper
+# Output options
+$EnableMail               = $false
+$EnableFrontendExport     = $true
+
+# ---------------------------
+# SAMPLE DATA FILES
+# ---------------------------
+
+# Entra / Intune / Trend
+$SampleEntraDevicesFile  = Join-Path $SampleDataPath "entra_devices_demo.json"
+$SampleIntuneDevicesFile = Join-Path $SampleDataPath "intune_devices_demo.json"
+$SampleTrendDevicesFile  = Join-Path $SampleDataPath "trend_devices_demo.json"
+
+# Defender demo files
+$SampleDefenderAlertsFile     = Join-Path $SampleDataPath "defender_alerts_demo.json"
+$SampleDefenderMachinesFile   = Join-Path $SampleDataPath "defender_machines_demo.json"
+$SampleDefenderHuntingFile    = Join-Path $SampleDataPath "defender_hunting_demo.json"
+$SampleDefenderMissingKbsFile = Join-Path $SampleDataPath "defender_missing_kbs_demo.json"
+
+# ---------------------------
+# OUTPUT FILES
+# ---------------------------
+
+$Timestamp = Get-Date -Format "yyyyMMdd-HHmm"
+
+# Full report
+$FullReportFile = Join-Path $ReportsPath "security_device_full_report_$Timestamp.json"
+$FullReportStable = Join-Path $ReportsPath "security_device_full_report_demo.json"
+
+# Summary report
+$SummaryReportFile = Join-Path $ReportsPath "security_device_summary_$Timestamp.json"
+$SummaryReportStable = Join-Path $ReportsPath "security_device_summary_demo.json"
+
+# Frontend exports
+$FrontendFullReport   = Join-Path $FrontendDataPath "security_device_full_report.json"
+$FrontendSummary     = Join-Path $FrontendDataPath "security_device_summary.json"
+
+# ---------------------------
+# PROJECT NAME
+# ---------------------------
+
+$ReportName = "Security Device Monitor Report (Public Demo)"
+
+# ---------------------------
+# RISK LEVEL CONFIG
+# ---------------------------
+
+$RiskLevels = @{
+    Critical = 90
+    High     = 70
+    Medium   = 40
+    Low      = 10
 }
 
-# =====================================================
-# PUBLIC PLACEHOLDER CREDENTIALS
-# =====================================================
-# Demo mode does not require real values.
-# These placeholders are intentionally non-functional.
-# =====================================================
+# ---------------------------
+# LOGGING
+# ---------------------------
 
-$TenantId = $env:GRAPH_TENANT_ID
-$ClientId = $env:GRAPH_CLIENT_ID
-$ClientSecret = $env:GRAPH_CLIENT_SECRET
+$EnableVerboseLogging = $true
 
-$TrendApiKey = $env:TREND_API_KEY
+function Write-Log {
+    param (
+        [string]$Message,
+        [string]$Level = "INFO"
+    )
 
-$DefenderTenantId = $env:DEFENDER_TENANT_ID
-$DefenderClientId = $env:DEFENDER_CLIENT_ID
-$DefenderClientSecret = $env:DEFENDER_CLIENT_SECRET
+    $timestamp = Get-Date -Format "HH:mm:ss"
+    Write-Host "[$timestamp][$Level] $Message"
+}
 
-# =====================================================
-# TREND CACHE SETTINGS
-# =====================================================
+# ---------------------------
+# FOLDER INITIALIZATION
+# ---------------------------
 
-$TrendCacheMaxAgeHours = 12
-
-# =====================================================
-# MAIL SETTINGS - PUBLIC DEMO
-# =====================================================
-# Mail is disabled by default in the public version.
-# These values are placeholders only.
-# =====================================================
-
-$EmailRecipient = "demo-recipient@example.com"
-$EmailSender    = "demo-monitor@example.com"
-$SmtpServer     = "smtp.example.com"
-$SmtpPort       = 25
-
-# =====================================================
-# PROJECT PATH INITIALIZATION
-# =====================================================
-# Build project-relative paths used by the demo version.
-# =====================================================
-
-$ScriptRoot  = Split-Path -Parent $MyInvocation.MyCommand.Path
-$SrcRoot     = Split-Path -Parent $ScriptRoot
-$ProjectRoot = Split-Path -Parent $SrcRoot
-
-$DataPath          = Join-Path $ProjectRoot "data"
-$RawDataPath       = Join-Path $DataPath "raw"
-$ProcessedDataPath = Join-Path $DataPath "processed"
-$ReportsPath       = Join-Path $DataPath "reports"
-$SampleDataPath    = Join-Path $DataPath "sample"
-$InfraFilesPath    = Join-Path $DataPath "infra_files"
-
-foreach ($folder in @(
-    $DataPath,
+$Folders = @(
+    $DataRoot,
     $RawDataPath,
-    $ProcessedDataPath,
+    $ProcessedPath,
     $ReportsPath,
     $SampleDataPath,
-    $InfraFilesPath
-)) {
+    $FrontendDataPath
+)
+
+foreach ($folder in $Folders) {
     if (-not (Test-Path $folder)) {
-        New-Item -Path $folder -ItemType Directory -Force | Out-Null
+        New-Item -ItemType Directory -Path $folder -Force | Out-Null
+        Write-Log "Created folder: $folder"
     }
 }
 
-# =====================================================
-# DEMO INPUT FILES
-# =====================================================
-# These sample files are used by the public demo version.
-# Adjust names if your sample dataset filenames differ.
-# =====================================================
+# ---------------------------
+# VALIDATION
+# ---------------------------
 
-$SampleTrendFile  = Join-Path $SampleDataPath "sample_trend_workstations.json"
-$SampleEntraFile  = Join-Path $SampleDataPath "sample_entra_devices.json"
-$SampleIntuneFile = Join-Path $SampleDataPath "sample_intune_devices.json"
-
-# =====================================================
-# EXECUTION VALIDATION
-# =====================================================
-# In demo mode:
-# - no secret is mandatory
-# - no live API dependency should block execution
-#
-# In live mode:
-# - required credentials must be provided explicitly
-# =====================================================
-
-if (-not $DemoMode) {
-    if ($EnableGraphCollection -and (-not $TenantId -or -not $ClientId -or -not $ClientSecret)) {
-        throw "Graph collection is enabled, but Graph credentials are missing."
-    }
-
-    if ($EnableTrendApiCollection -and -not $TrendApiKey) {
-        throw "Trend API collection is enabled, but TREND_API_KEY is missing."
-    }
-
-    if ($EnableDefender -and (-not $DefenderTenantId -or -not $DefenderClientId -or -not $DefenderClientSecret)) {
-        throw "Defender collection is enabled, but Defender credentials are missing."
-    }
-
-    if ($EnableMail) {
-        if (-not $EmailRecipient -or -not $EmailSender -or -not $SmtpServer -or -not $SmtpPort) {
-            throw "Mail is enabled, but one or more SMTP settings are missing."
-        }
-    }
+if ($DemoMode -and -not $EnableDemoData) {
+    throw "DemoMode is enabled but EnableDemoData is disabled."
 }
 
-# =====================================================
-# GLOBAL POWERSHELL BEHAVIOR
-# =====================================================
+if ($EnableDefenderDemo) {
+    Write-Log "Defender demo mode enabled"
+}
 
-$ErrorActionPreference = "Stop"
-
-# =====================================================
-# EXECUTION BANNER
-# =====================================================
-
-Write-Host "[OK] Public demo configuration loaded" -ForegroundColor Green
-Write-Host "[INFO] Demo mode: $DemoMode" -ForegroundColor White
-Write-Host "[INFO] Graph collection enabled: $EnableGraphCollection" -ForegroundColor White
-Write-Host "[INFO] Trend API collection enabled: $EnableTrendApiCollection" -ForegroundColor White
-Write-Host "[INFO] Defender enabled: $EnableDefender" -ForegroundColor White
-Write-Host "[INFO] Mail enabled: $EnableMail" -ForegroundColor White
+Write-Log "Configuration loaded successfully"
